@@ -1,24 +1,52 @@
-# Release skeleton (WP0). Publishing is enabled in WP7 with checksums and
-# provenance; until then this workflow only verifies that release packaging works.
+# WP7 release (build spec section 27): on a version tag, build the artifact
+# set (npm tarballs + standalone plugin archive + SHA256SUMS), attest
+# build provenance, attach everything to a GitHub release, and publish the
+# npm packages with npm provenance when an NPM_TOKEN secret is configured.
 name: Release
 
 on:
   push:
-    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
 
 jobs:
-  package-smoke:
+  release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20.x"
+          node-version: "22.x"
           cache: pnpm
+          registry-url: "https://registry.npmjs.org"
       - name: Install
         run: pnpm install --frozen-lockfile
       - name: Build
         run: pnpm build
-      - name: Pack workspace packages (smoke test)
-        run: pnpm -r exec pnpm pack --pack-destination "$RUNNER_TEMP"
+      - name: Test
+        run: pnpm test
+      - name: Package artifacts + SHA256SUMS
+        run: node scripts/package-artifacts.mjs
+      - name: Clean-install smoke test
+        run: node scripts/package-smoke.mjs
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: "dist-artifacts/*.tgz"
+      - name: Create GitHub release with artifacts and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" dist-artifacts/*.tgz dist-artifacts/SHA256SUMS \
+            --title "${{ github.ref_name }}" \
+            --notes "raia Agent DevKit ${{ github.ref_name }}. Verify artifacts against SHA256SUMS; provenance attestations are attached via GitHub Attestations."
+      - name: Publish npm packages with provenance
+        if: ${{ secrets.NPM_TOKEN != '' }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm -r publish --access public --no-git-checks --provenance

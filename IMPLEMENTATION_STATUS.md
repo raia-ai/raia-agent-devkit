@@ -198,8 +198,51 @@ clean; build green including plugin assembly; both contract-sync gates green;
   `RAIA_ACCESS_TOKEN` (CI fallback) and `RAIA_AGENT_SECRET_KEY` are the
   supported sources today.
 
-## Next smallest vertical slice (WP7 — proposed, not started)
+## WP7 — Hardening and distribution
 
-Hardening and packaging: 3-OS CI matrix with coverage floors (90% core / 85%
-providers+eval / 80% overall), packaged CLI/MCP/plugin artifacts with SHA-256
-checksums and provenance, the docs golden path, and zero skipped tests.
+| Gate                                                      | Status      | Evidence                                                                                                                                                                                                                                                                       |
+| --------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Coverage floors: 90 core / 85 providers+eval / 80 overall | ✅ complete | `pnpm coverage` → core 96.63/90.82, providers 93.09/86.55, eval-engine 96.78/90.87, overall 92.15/85.52 (lines/branches %); enforced by `scripts/check-coverage.mjs` using the spec's exact scopes; ~66 new tests close the gaps (evaluators, semantic-diff arms, error paths) |
+| No skipped tests                                          | ✅ complete | `pnpm check:no-skip` forbids `.skip/.only/.todo` across 33+ test files; the suite reports 314 passed, 0 skipped                                                                                                                                                                |
+| 3-OS CI matrix, Node 20 + active LTS                      | ✅ complete | `.github/workflows/ci.yml`: ubuntu/macos/windows × 20.x/22.x running preflight, all drift checks, format, lint, types, no-skip, build, tests, packaging, and the clean-install smoke; separate coverage and strict-plugin-validation jobs                                      |
+| OpenAPI validation in CI                                  | ✅ complete | `packages/contracts/test/openapi.test.ts` validates both wire contracts (management YAML + pinned vendor projection) offline with @seriousme/openapi-schema-validator                                                                                                          |
+| Secret scanning in CI                                     | ✅ complete | `packages/core/test/repo-secret-scan.test.ts` runs the DevKit's own rule set over the source tree with a reviewed false-positive baseline that fails on unreviewed findings AND on stale entries                                                                               |
+| Packaged artifacts + SHA-256 checksums                    | ✅ complete | `scripts/package-artifacts.mjs` → 8 npm tarballs + standalone plugin archive + `SHA256SUMS` (9 artifacts)                                                                                                                                                                      |
+| Clean artifact install passes                             | ✅ complete | `scripts/package-smoke.mjs`: checksum re-verification → npm install of the CLI tarball into a fresh temp project (workspace deps via file: overrides) → installed `raia` runs init → validate → test → extracted plugin bundle runs; step in the 3-OS matrix                   |
+| Provenance where supported                                | ✅ complete | `release.yml` on version tags: build, test, package, smoke, `actions/attest-build-provenance`, GitHub release with artifacts + checksums, npm publish `--provenance` gated on a configured token                                                                               |
+| Docs reproduce the golden path                            | ✅ complete | `README.md` (golden path, exit-code contract, package map, security invariants), `CONTRIBUTING.md`, `docs/versioning-and-migration.md`                                                                                                                                         |
+
+Final suite: **314 tests across 35 files**, everything green with explicit
+exit codes: preflight, contracts sync, generated-types drift, conversation
+contract drift, format, lint, typecheck (9/9), no-skip, build, test,
+coverage floors, packaging, clean-install smoke, and
+`claude plugin validate --strict`.
+
+## WP7 known limitations
+
+- The npm publish step is real but dormant until an `NPM_TOKEN` secret and a
+  version tag exist; artifact packaging, checksums, and the GitHub-release
+  path are exercised in CI regardless.
+- macOS/Windows runs execute in GitHub Actions; local verification for this
+  work package was Linux (the matrix is the cross-OS gate).
+- The secret-scan baseline lists reviewed TypeScript-identifier false
+  positives; tuning the credential-assignment rule to ignore type
+  annotations would shrink it and is a candidate refinement.
+- OS-credential-manager storage and the OAuth device flow remain future
+  scope (`RAIA_ACCESS_TOKEN` / `RAIA_AGENT_SECRET_KEY` env sources today).
+
+## MVP completion
+
+All eight work packages (WP0–WP7) are complete with recorded evidence. Per
+the build spec's definition of done: every work-package gate passes, public
+packages contain no internal path imports (boundary tests), the plugin
+validates strictly and runs from its built artifact (smoke test), the
+documentation reproduces the golden path, security invariants have negative
+tests, and a fresh machine can use the mock provider with no raia
+credentials. The management HTTP provider meets the spec's explicit bar:
+every proposed OpenAPI operation has success and typed-failure contract
+tests, timeout/retry coverage, request-ID propagation, and redaction tests
+against a conforming local server. Open platform decisions (live management
+API, approvals above zero, per-conversation delete in the external contract)
+are recorded in `DECISIONS_REQUIRED.md` context and ADRs 0005–0006 rather
+than guessed.

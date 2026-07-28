@@ -1,5 +1,8 @@
-# CI for WP0/WP1. Matrix note: macOS and Windows runners are added in WP7
-# (build spec section 27); until then Linux runs every check with no skipped tests.
+# WP7 CI (build spec section 27): Linux/macOS/Windows × Node 20 and the
+# active LTS, running format, lint, strict types, drift checks, schema and
+# OpenAPI validation (in the test suite), unit/integration/CLI-contract/MCP
+# tests, secret scanning (in the test suite), coverage floors, package
+# builds, packaged-artifact clean-install smoke, and no skipped tests.
 name: CI
 
 on:
@@ -9,9 +12,11 @@ on:
 
 jobs:
   checks:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
         node-version: ["20.x", "22.x"]
     steps:
       - uses: actions/checkout@v4
@@ -28,13 +33,51 @@ jobs:
         run: pnpm contracts:check
       - name: Generated types drift check
         run: pnpm generate:check
+      - name: Conversation contract drift check
+        run: node packages/conversation-client/scripts/check-contract-sync.mjs
       - name: Format check
         run: pnpm format:check
       - name: Lint
         run: pnpm lint
       - name: Type check
         run: pnpm typecheck
+      - name: No skipped tests
+        run: pnpm check:no-skip
       - name: Build
         run: pnpm build
       - name: Test
         run: pnpm test
+      - name: Package artifacts (checksums)
+        run: node scripts/package-artifacts.mjs
+      - name: Clean-install artifact smoke test
+        run: node scripts/package-smoke.mjs
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Coverage floors (core 90, providers/eval 85, overall 80)
+        run: pnpm coverage
+
+  plugin-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build (assembles plugin dist)
+        run: pnpm build
+      - name: Strict plugin validation
+        run: npx --yes @anthropic-ai/claude-code plugin validate plugins/claude-code --strict

@@ -19,12 +19,15 @@
     "contracts:check": "node packages/contracts/scripts/check-sync.mjs",
     "preflight": "node docs/raia-devkit-spec/preflight.mjs",
     "changeset": "changeset",
-    "build:plugin": "node scripts/build-plugin.mjs"
+    "build:plugin": "node scripts/build-plugin.mjs",
+    "coverage": "vitest run --coverage --coverage.reporter=json-summary --coverage.reporter=text-summary && node scripts/check-coverage.mjs",
+    "check:no-skip": "node scripts/check-no-skipped-tests.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.2",
     "@eslint/js": "^9.28.0",
     "@types/node": "^20.19.0",
+    "@vitest/coverage-v8": "3.2.4",
     "eslint": "^9.28.0",
     "json-schema-to-typescript": "^15.0.4",
     "prettier": "^3.5.3",
