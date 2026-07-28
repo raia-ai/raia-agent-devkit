@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.raia.ai/devkit/v1alpha1/agent-lock.schema.json",
+  "title": "raia Agent Lock File",
+  "description": "Deterministic resolution record for a raia agent manifest.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "lockVersion",
+    "manifestApiVersion",
+    "manifestSha256",
+    "generatedBy",
+    "resolved"
+  ],
+  "properties": {
+    "lockVersion": {
+      "const": 1
+    },
+    "manifestApiVersion": {
+      "const": "devkit.raia.ai/v1alpha1"
+    },
+    "manifestSha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Informational only; excluded from deterministic content hashing."
+    },
+    "generatedBy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cliVersion"],
+      "properties": {
+        "cliVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "gitCommit": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{7,64}$"
+        }
+      }
+    },
+    "remote": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workspaceId", "agentId", "baseVersionId", "etag"],
+      "properties": {
+        "workspaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "agentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "baseVersionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "etag": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "region": {
+          "type": "string",
+          "enum": ["us", "eu", "custom"]
+        }
+      }
+    },
+    "resolved": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "skills", "functions", "knowledge", "integrations", "policyPacks", "evaluators"],
+      "properties": {
+        "model": {
+          "$ref": "#/$defs/resolvedItem"
+        },
+        "skills": {
+          "$ref": "#/$defs/resolvedItemArray"
+        },
+        "functions": {
+          "$ref": "#/$defs/resolvedItemArray"
+        },
+        "knowledge": {
+          "$ref": "#/$defs/resolvedItemArray"
+        },
+        "integrations": {
+          "$ref": "#/$defs/resolvedItemArray"
+        },
+        "policyPacks": {
+          "$ref": "#/$defs/resolvedItemArray"
+        },
+        "evaluators": {
+          "$ref": "#/$defs/resolvedItemArray"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "resolvedItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "checksum"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "remoteId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "checksum": {
+          "$ref": "#/$defs/sha256"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {
+            "type": ["string", "number", "boolean", "null"]
+          }
+        }
+      }
+    },
+    "resolvedItemArray": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/resolvedItem"
+      }
+    }
+  }
+}

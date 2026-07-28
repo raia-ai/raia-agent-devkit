@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    // noImplicitOverride stays off: the normative, byte-synced
+    // docs/raia-devkit-spec/contracts/provider-contract.ts declares
+    // `readonly name` without `override` and must not be edited locally.
+    "noImplicitOverride": false,
+    "esModuleInterop": true,
+    "exactOptionalPropertyTypes": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "declaration": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true
+  }
+}

@@ -43,7 +43,7 @@ LF endings, UTF-8, compact serialization, SHA-256 `sha256:<64hex>`. Open details
   canonicalization error (they cannot appear in JSON evidence).
 - `undefined` object members are omitted; `null` is preserved.
 - Strings are hashed over their UTF-8 bytes after LF normalization only when the
-  value is file *content*; embedded YAML scalar strings are not line-ending-rewritten.
+  value is file _content_; embedded YAML scalar strings are not line-ending-rewritten.
 
 ## 5. Required-suite hashing includes fixture content transitively
 

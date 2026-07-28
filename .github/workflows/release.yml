@@ -1,0 +1,24 @@
+# Release skeleton (WP0). Publishing is enabled in WP7 with checksums and
+# provenance; until then this workflow only verifies that release packaging works.
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  package-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build
+        run: pnpm build
+      - name: Pack workspace packages (smoke test)
+        run: pnpm -r exec pnpm pack --pack-destination "$RUNNER_TEMP"

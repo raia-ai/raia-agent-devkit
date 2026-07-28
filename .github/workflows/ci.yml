@@ -1,0 +1,40 @@
+# CI for WP0/WP1. Matrix note: macOS and Windows runners are added in WP7
+# (build spec section 27); until then Linux runs every check with no skipped tests.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: ["20.x", "22.x"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: pnpm
+      - name: Spec package preflight
+        run: node docs/raia-devkit-spec/preflight.mjs
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Contracts sync check
+        run: pnpm contracts:check
+      - name: Generated types drift check
+        run: pnpm generate:check
+      - name: Format check
+        run: pnpm format:check
+      - name: Lint
+        run: pnpm lint
+      - name: Type check
+        run: pnpm typecheck
+      - name: Build
+        run: pnpm build
+      - name: Test
+        run: pnpm test
