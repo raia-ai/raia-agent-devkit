@@ -1,9 +1,11 @@
 /**
- * Filesystem-backed mock ManagementProvider (build spec section 17).
- * WP2 scope: identity, discovery, export, versioning, ETags, pagination, and
- * typed errors. Lifecycle mutations (drafts, evaluations, releases,
- * deployments, traces) arrive in WP3/WP4 and currently fail closed with a
- * typed UNAVAILABLE error rather than pretending to succeed.
+ * Filesystem-backed mock ManagementProvider (build spec section 17):
+ * identity, discovery, export, versioning, ETags, pagination, typed errors,
+ * and the lifecycle mutation plane — drafts, immutable release candidates,
+ * deployments with deterministic asynchronous completion, rollbacks,
+ * optimistic concurrency (STALE_BASE), and idempotency replay/mismatch.
+ * Remote evaluation runs and traces arrive with WP5/WP6 and fail closed with
+ * typed UNAVAILABLE errors rather than pretending to succeed.
  */
 import { ProviderError } from "@raia/contracts";
 import type {
@@ -25,7 +27,8 @@ import type {
   TraceSummary,
   Workspace,
 } from "@raia/contracts";
-import { StateStore } from "./state.js";
+import { decideDeploymentTransition, hashCanonical } from "@raia/core";
+import { StateStore, type MockState } from "./state.js";
 import { buildBundleFromFixture } from "./seed.js";
 
 export interface MockProviderOptions {
@@ -37,6 +40,8 @@ export interface MockProviderOptions {
   scopes?: string[];
   /** Marks the provider as unreachable to simulate outages. */
   unavailable?: boolean;
+  /** Deployment fixture: whether staging deployments converge HEALTHY or FAILED. */
+  deploymentOutcome?: "healthy" | "failed";
 }
 
 const DEFAULT_SCOPES = [
@@ -83,12 +88,14 @@ export class MockManagementProvider implements ManagementProvider {
   readonly #now: () => string;
   readonly #scopes: string[];
   readonly #unavailable: boolean;
+  readonly #deploymentOutcome: "healthy" | "failed";
 
   constructor(options: MockProviderOptions) {
     this.#store = new StateStore(options.stateDir);
     this.#now = options.now ?? (() => new Date().toISOString());
     this.#scopes = options.scopes ?? DEFAULT_SCOPES;
     this.#unavailable = options.unavailable ?? false;
+    this.#deploymentOutcome = options.deploymentOutcome ?? "healthy";
   }
 
   #checkAvailable(context: OperationContext): void {
@@ -227,6 +234,78 @@ export class MockManagementProvider implements ManagementProvider {
     };
   }
 
+  #requireScope(context: OperationContext, scope: string): void {
+    if (!this.#scopes.includes(scope)) {
+      throw new ProviderError(
+        `The credential lacks the "${scope}" scope required for this operation.`,
+        "PERMISSION_DENIED",
+        context.requestId,
+      );
+    }
+  }
+
+  #checkStaleBase(context: MutationContext, summary: AgentSummary): void {
+    if (context.baseVersionId !== undefined && context.baseVersionId !== summary.currentVersionId) {
+      throw new ProviderError(
+        `Stale base version: expected "${context.baseVersionId}" but the remote is at "${summary.currentVersionId}".`,
+        "STALE_BASE",
+        context.requestId,
+        false,
+        {
+          expectedVersionId: context.baseVersionId,
+          currentVersionId: summary.currentVersionId,
+        },
+      );
+    }
+    if (context.expectedEtag !== undefined && context.expectedEtag !== summary.etag) {
+      throw new ProviderError(
+        "ETag precondition failed: the remote agent changed.",
+        "STALE_BASE",
+        context.requestId,
+      );
+    }
+  }
+
+  /**
+   * Idempotency envelope (build spec section 17): replaying a key with an
+   * identical canonical request returns the original response; a different
+   * request with the same key fails with IDEMPOTENCY_MISMATCH.
+   */
+  async #idempotent<T>(
+    context: MutationContext,
+    operation: string,
+    request: unknown,
+    execute: (state: MockState) => T,
+  ): Promise<T> {
+    const requestSha256 = hashCanonical({ operation, request });
+    return this.#store.update((state) => {
+      const existing = state.idempotency[context.idempotencyKey];
+      if (existing !== undefined) {
+        if (existing.requestSha256 === requestSha256 && existing.operation === operation) {
+          return structuredClone(existing.response) as T;
+        }
+        throw new ProviderError(
+          "Idempotency key was already used with a different request.",
+          "IDEMPOTENCY_MISMATCH",
+          context.requestId,
+        );
+      }
+      const response = execute(state);
+      state.idempotency[context.idempotencyKey] = {
+        operation,
+        requestSha256,
+        response: structuredClone(response),
+      };
+      return response;
+    });
+  }
+
+  #nextId(state: MockState, prefix: string): string {
+    const next = (state.counters[prefix] ?? 0) + 1;
+    state.counters[prefix] = next;
+    return `${prefix}_${next}`;
+  }
+
   async createChangePlan(
     context: OperationContext,
     _input: {
@@ -238,18 +317,51 @@ export class MockManagementProvider implements ManagementProvider {
   ): Promise<ChangePlan> {
     this.#checkAvailable(context);
     throw new ProviderError(
-      "createChangePlan is implemented in a later work package (WP4).",
+      "createChangePlan is not part of the local-first MVP surface; the semantic plan is computed by the deterministic core.",
       "UNAVAILABLE",
       context.requestId,
     );
   }
 
-  async createDraft(context: MutationContext, _input: unknown & object): Promise<Draft> {
+  async createDraft(
+    context: MutationContext,
+    input: {
+      agentId: string;
+      manifestSha256: Sha256;
+      bundle: unknown;
+      clientMetadata?: Record<string, unknown>;
+    },
+  ): Promise<Draft> {
     this.#checkAvailable(context);
-    throw new ProviderError(
-      "createDraft is implemented in a later work package (WP4).",
-      "UNAVAILABLE",
-      context.requestId,
+    this.#requireScope(context, "agent:draft");
+    const now = this.#now();
+    return this.#idempotent(
+      context,
+      "createDraft",
+      { agentId: input.agentId, manifestSha256: input.manifestSha256 },
+      (state) => {
+        const agent = state.agents[input.agentId];
+        if (agent === undefined) {
+          throw new ProviderError(
+            `Unknown agent "${input.agentId}".`,
+            "NOT_FOUND",
+            context.requestId,
+          );
+        }
+        this.#checkStaleBase(context, agent.summary);
+        const id = this.#nextId(state, "draft");
+        const draft: Draft = {
+          id,
+          agentId: input.agentId,
+          baseVersionId: context.baseVersionId ?? agent.summary.currentVersionId,
+          manifestSha256: input.manifestSha256,
+          state: "DRAFT",
+          createdAt: now,
+          etag: `W/"${id}"`,
+        };
+        state.drafts[id] = draft;
+        return structuredClone(draft);
+      },
     );
   }
 
@@ -276,45 +388,204 @@ export class MockManagementProvider implements ManagementProvider {
 
   async createReleaseCandidate(
     context: MutationContext,
-    _input: unknown & object,
+    input: {
+      agentId: string;
+      draftId?: string;
+      candidateSha256: Sha256;
+      manifestSha256: Sha256;
+      lockSha256: Sha256;
+      gitCommit?: string;
+      evidence: Array<{ type: string; id: string; sha256: Sha256 }>;
+    },
   ): Promise<ReleaseCandidate> {
     this.#checkAvailable(context);
-    throw new ProviderError(
-      "createReleaseCandidate is implemented in a later work package (WP4).",
-      "UNAVAILABLE",
-      context.requestId,
+    this.#requireScope(context, "release:create");
+    if (input.evidence.length === 0) {
+      throw new ProviderError(
+        "A release candidate requires at least one evidence reference.",
+        "POLICY_FAILED",
+        context.requestId,
+      );
+    }
+    const now = this.#now();
+    return this.#idempotent(
+      context,
+      "createReleaseCandidate",
+      {
+        agentId: input.agentId,
+        candidateSha256: input.candidateSha256,
+        manifestSha256: input.manifestSha256,
+        lockSha256: input.lockSha256,
+        evidence: input.evidence,
+      },
+      (state) => {
+        const agent = state.agents[input.agentId];
+        if (agent === undefined) {
+          throw new ProviderError(
+            `Unknown agent "${input.agentId}".`,
+            "NOT_FOUND",
+            context.requestId,
+          );
+        }
+        this.#checkStaleBase(context, agent.summary);
+        const id = this.#nextId(state, "rc");
+        const release: ReleaseCandidate = {
+          id,
+          agentId: input.agentId,
+          baseVersionId: context.baseVersionId ?? agent.summary.currentVersionId,
+          candidateSha256: input.candidateSha256,
+          manifestSha256: input.manifestSha256,
+          state: "RELEASED",
+          createdAt: now,
+        };
+        // Release candidates are immutable: stored once, never updated. No
+        // mutation API exists; a reused idempotency key with altered hashes
+        // fails above with IDEMPOTENCY_MISMATCH.
+        state.releases[id] = release;
+        return structuredClone(release);
+      },
     );
   }
 
-  async createDeployment(context: MutationContext, _input: unknown & object): Promise<Deployment> {
+  async createDeployment(
+    context: MutationContext,
+    input: {
+      releaseCandidateId: string;
+      environment: "development" | "staging" | "production";
+      reason?: string;
+    },
+  ): Promise<Deployment> {
     this.#checkAvailable(context);
-    throw new ProviderError(
-      "createDeployment is implemented in a later work package (WP4).",
-      "UNAVAILABLE",
-      context.requestId,
+    this.#requireScope(context, "deployment:promote");
+    if (input.environment === "production") {
+      throw new ProviderError(
+        "Production promotion is reserved for the raia management UI; server policy allows development and staging only.",
+        "PERMISSION_DENIED",
+        context.requestId,
+      );
+    }
+    const now = this.#now();
+    return this.#idempotent(
+      context,
+      "createDeployment",
+      { releaseCandidateId: input.releaseCandidateId, environment: input.environment },
+      (state) => {
+        const release = state.releases[input.releaseCandidateId];
+        if (release === undefined) {
+          throw new ProviderError(
+            `Unknown release candidate "${input.releaseCandidateId}".`,
+            "NOT_FOUND",
+            context.requestId,
+          );
+        }
+        if (release.state !== "RELEASED") {
+          throw new ProviderError(
+            "Only an immutable RELEASED candidate can be deployed.",
+            "INVALID_TRANSITION",
+            context.requestId,
+          );
+        }
+        const rollbackTarget = Object.values(state.deployments)
+          .map((stored) => stored.deployment)
+          .filter((d) => d.environment === input.environment && d.state === "HEALTHY")
+          .sort((a, b) => a.id.localeCompare(b.id))
+          .at(-1);
+        const id = this.#nextId(state, "dep");
+        const deployment: Deployment = {
+          id,
+          releaseCandidateId: input.releaseCandidateId,
+          environment: input.environment,
+          state: "QUEUED",
+          ...(rollbackTarget !== undefined ? { rollbackTargetId: rollbackTarget.id } : {}),
+          createdAt: now,
+          updatedAt: now,
+        };
+        state.deployments[id] = {
+          deployment,
+          plan:
+            this.#deploymentOutcome === "failed"
+              ? ["DEPLOYING", "FAILED"]
+              : ["DEPLOYING", "HEALTHY"],
+          planIndex: 0,
+        };
+        return structuredClone(deployment);
+      },
     );
   }
 
-  async getDeployment(context: OperationContext, _deploymentId: string): Promise<Deployment> {
+  async getDeployment(context: OperationContext, deploymentId: string): Promise<Deployment> {
     this.#checkAvailable(context);
-    throw new ProviderError(
-      "getDeployment is implemented in a later work package (WP4).",
-      "UNAVAILABLE",
-      context.requestId,
-    );
+    this.#requireScope(context, "deployment:read");
+    const now = this.#now();
+    return this.#store.update((state) => {
+      const stored = state.deployments[deploymentId];
+      if (stored === undefined) {
+        throw new ProviderError(
+          `Unknown deployment "${deploymentId}".`,
+          "NOT_FOUND",
+          context.requestId,
+        );
+      }
+      // Deterministic asynchronous completion: each poll advances one step.
+      if (stored.planIndex < stored.plan.length) {
+        const next = stored.plan[stored.planIndex]!;
+        const decision = decideDeploymentTransition(stored.deployment.state, next);
+        if (decision.ok) {
+          stored.deployment.state = next;
+          stored.deployment.updatedAt = now;
+          stored.planIndex += 1;
+          if (next === "HEALTHY") {
+            for (const other of Object.values(state.deployments)) {
+              if (
+                other.deployment.id !== deploymentId &&
+                other.deployment.environment === stored.deployment.environment &&
+                other.deployment.state === "HEALTHY"
+              ) {
+                other.deployment.state = "SUPERSEDED";
+                other.deployment.updatedAt = now;
+              }
+            }
+          }
+        }
+      }
+      return structuredClone(stored.deployment);
+    });
   }
 
   async rollbackDeployment(
     context: MutationContext,
-    _deploymentId: string,
-    _reason: string,
+    deploymentId: string,
+    reason: string,
   ): Promise<Deployment> {
     this.#checkAvailable(context);
-    throw new ProviderError(
-      "rollbackDeployment is implemented in a later work package (WP4).",
-      "UNAVAILABLE",
-      context.requestId,
-    );
+    this.#requireScope(context, "deployment:rollback");
+    if (reason.trim().length === 0) {
+      throw new ProviderError(
+        "A rollback requires an explicit reason.",
+        "VALIDATION_FAILED",
+        context.requestId,
+      );
+    }
+    const now = this.#now();
+    return this.#idempotent(context, "rollbackDeployment", { deploymentId, reason }, (state) => {
+      const stored = state.deployments[deploymentId];
+      if (stored === undefined) {
+        throw new ProviderError(
+          `Unknown deployment "${deploymentId}".`,
+          "NOT_FOUND",
+          context.requestId,
+        );
+      }
+      const decision = decideDeploymentTransition(stored.deployment.state, "ROLLING_BACK");
+      if (!decision.ok) {
+        throw new ProviderError(decision.message, "INVALID_TRANSITION", context.requestId);
+      }
+      stored.deployment.state = "ROLLING_BACK";
+      stored.deployment.updatedAt = now;
+      stored.plan = ["ROLLED_BACK"];
+      stored.planIndex = 0;
+      return structuredClone(stored.deployment);
+    });
   }
 
   async listTraces(

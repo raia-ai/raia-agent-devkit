@@ -4,11 +4,32 @@
  */
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { AgentBundle, AgentSummary, Workspace } from "@raia/contracts";
+import type {
+  AgentBundle,
+  AgentSummary,
+  Deployment,
+  DeploymentState,
+  Draft,
+  ReleaseCandidate,
+  Workspace,
+} from "@raia/contracts";
 
 export interface StoredAgent {
   summary: AgentSummary;
   versions: Record<string, AgentBundle>;
+}
+
+export interface StoredDeployment {
+  deployment: Deployment;
+  /** Deterministic progression; each poll advances one step. */
+  plan: DeploymentState[];
+  planIndex: number;
+}
+
+export interface IdempotencyRecord {
+  operation: string;
+  requestSha256: string;
+  response: unknown;
 }
 
 export interface MockState {
@@ -16,10 +37,23 @@ export interface MockState {
   counters: Record<string, number>;
   workspaces: Workspace[];
   agents: Record<string, StoredAgent>;
+  drafts: Record<string, Draft>;
+  releases: Record<string, ReleaseCandidate>;
+  deployments: Record<string, StoredDeployment>;
+  idempotency: Record<string, IdempotencyRecord>;
 }
 
 export function emptyState(): MockState {
-  return { stateVersion: 1, counters: {}, workspaces: [], agents: {} };
+  return {
+    stateVersion: 1,
+    counters: {},
+    workspaces: [],
+    agents: {},
+    drafts: {},
+    releases: {},
+    deployments: {},
+    idempotency: {},
+  };
 }
 
 export class StateStore {
@@ -36,7 +70,9 @@ export class StateStore {
   async read(): Promise<MockState> {
     try {
       const raw = await readFile(this.#file, "utf8");
-      return JSON.parse(raw) as MockState;
+      const parsed = JSON.parse(raw) as Partial<MockState>;
+      // Older state files may predate the mutation stores; default them.
+      return { ...emptyState(), ...parsed };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         return emptyState();

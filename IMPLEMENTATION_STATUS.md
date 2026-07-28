@@ -102,11 +102,39 @@ Decisions in `docs/adr/0003-wp3-evaluation-choices.md`.
 - Approval requirements above zero fail closed until approval records exist (WP4).
 - Simulator-based conversations are recorded as skipped in fixture mode.
 
-## Next smallest vertical slice (WP4 — proposed, not started)
+## WP4 — Release and staging
 
-Lifecycle engine and release/staging: pure transition decisions with atomic
-`.raia/workflow-state.json` persistence and evidence invalidation; mock-provider
-drafts, immutable release candidates, idempotency replay/mismatch, stale-base/ETag
-conflicts; staging deployment `QUEUED → DEPLOYING → HEALTHY` with rollback targets;
-`raia release create` and `raia deploy staging` with `--yes` previews and exits `5`
-on conflicts.
+| Gate                                                                              | Status      | Evidence                                                                                                                                                                                          |
+| --------------------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Lifecycle transitions pure, exhaustive, deny invalid                              | ✅ complete | `packages/core/test/lifecycle.test.ts` checks every (from, to) pair of both state machines against the spec's transition lists; invalid transitions throw `INVALID_TRANSITION` and modify nothing |
+| `.raia/workflow-state.json` schema-valid and atomic                               | ✅ complete | Save validates against the normative schema (invalid state refused), temp-file + rename writes; round-trip test                                                                                   |
+| Candidate change invalidates prior evidence                                       | ✅ complete | `reconcileCandidate` unit tests + end-to-end: released project → prompt edit → stage DRAFT, evidence cleared, release blocked until fresh evidence; deploy refuses with "invalidated"             |
+| Release policy checks exact candidate and evidence hashes                         | ✅ complete | Shared `aggregateReadiness` path (review = gate); evidence bound to a different candidate is a named blocker; `applyTransition` rejects mismatched evidence (`EVIDENCE_MISMATCH`)                 |
+| Releases immutable                                                                | ✅ complete | No mutation API exists; reused key with altered hashes → `IDEMPOTENCY_MISMATCH` (scenario 7)                                                                                                      |
+| Idempotent replay returns original result (scenario 8)                            | ✅ complete | Provider test: same key+payload → identical candidate; CLI: re-running `release create` returns the same `rc_1` with `alreadyReleased: true`                                                      |
+| Changed payload + reused key → `IDEMPOTENCY_MISMATCH` (scenario 9)                | ✅ complete | Provider mutation test                                                                                                                                                                            |
+| Stale base/ETag fails without state change, exit `5` (scenario 10)                | ✅ complete | Provider: baseVersionId and ETag mismatches → `STALE_BASE`; CLI test relaxes `requireNoDrift` to prove the provider-level guard exits `5` (readiness normally catches drift first at exit `3`)    |
+| Staging deployment `QUEUED → DEPLOYING → HEALTHY` + rollback target (scenario 11) | ✅ complete | Deterministic one-step-per-poll progression; second deployment records the first as rollback target and supersedes it; failure fixture → `FAILED` → rollback → `ROLLED_BACK`                      |
+| Missing scope exits `4` (scenario 13)                                             | ✅ complete | `.raia/mock/config.json` scope fixtures: release without `release:create` and deploy without `deployment:promote` both exit `4`                                                                   |
+| No production deployment command exists                                           | ✅ complete | CLI accepts only `staging` (production names a refusal message, exit `2`); mock rejects production with `PERMISSION_DENIED`; policy schema restricts `claudeCodeAllowed`                          |
+
+Full suite after WP4: **177 tests across 19 files**; typecheck 5/5; lint 0; format
+clean; build 10/10. Built-binary golden path now runs the complete lifecycle:
+`init → test → release create (rc_1, stage RELEASED) → deploy staging
+(QUEUED → DEPLOYING → HEALTHY, dep_1) → status`. Decisions in
+`docs/adr/0004-wp4-lifecycle-and-release-choices.md`.
+
+## WP4 known limitations
+
+- Approvals above zero fail closed (authenticated approval records are a deferred
+  platform decision); the staging path requires zero per the example policy.
+- `raia pull` and drafts-from-CLI are not yet wired (drafts exist in the provider);
+  refreshing the lock after remote drift currently reuses `init --force`.
+- Traces (`raia trace`, `raia learn`) arrive with WP5 alongside the MCP surface.
+
+## Next smallest vertical slice (WP5 — proposed, not started)
+
+Local stdio MCP server matching `contracts/mcp-tool-catalog.json` exactly (tool
+allowlist, staging-only, size-capped redacted outputs), mock trace fixtures with
+redaction, and the Claude Code plugin: bundled server, skills, review agents,
+cross-platform hooks, strict manifest validation.

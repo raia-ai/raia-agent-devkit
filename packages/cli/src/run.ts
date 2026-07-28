@@ -13,6 +13,8 @@ import { runDiff } from "./commands/diff.js";
 import { runStatus } from "./commands/status.js";
 import { runTest } from "./commands/test.js";
 import { runReview } from "./commands/review.js";
+import { runReleaseCreate } from "./commands/release.js";
+import { runDeploy } from "./commands/deploy.js";
 
 export const CLI_VERSION = "0.1.0";
 
@@ -127,6 +129,27 @@ export async function run(argv: string[], io: CliIO): Promise<number> {
     .description("Aggregate diff, validation, evaluation, risk, and release-policy evidence.")
     .action(async () => {
       exitCode = await runReview(io, flags());
+    });
+
+  const release = program.command("release").description("Manage immutable release candidates.");
+  release
+    .command("create")
+    .description("Create an immutable release candidate from verified evidence.")
+    .option("-y, --yes", "skip the preview confirmation", false)
+    .action(async (options: Record<string, unknown>) => {
+      exitCode = await runReleaseCreate(io, flags(), { yes: Boolean(options["yes"]) });
+    });
+
+  program
+    .command("deploy")
+    .description("Deploy an approved release candidate to staging.")
+    .argument("<environment>", "target environment (staging)")
+    .option("-y, --yes", "skip the preview confirmation", false)
+    .action(async (environment: string, options: Record<string, unknown>) => {
+      exitCode = await runDeploy(io, flags(), {
+        environment,
+        yes: Boolean(options["yes"]),
+      });
     });
 
   try {

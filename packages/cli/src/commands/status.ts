@@ -3,7 +3,7 @@
  * release, and deployment summary. Read-only.
  */
 import path from "node:path";
-import { loadManifest, parseLock, validateProject } from "@raia/core";
+import { loadManifest, loadWorkflowState, parseLock, validateProject } from "@raia/core";
 import { UsageError } from "../exit-codes.js";
 import { emitResult, type CliIO, type GlobalFlags } from "../io.js";
 import { readBinding, readTextIfExists, VALIDATION_REPORT_PATH } from "../project-files.js";
@@ -44,6 +44,25 @@ export async function runStatus(io: CliIO, flags: GlobalFlags): Promise<number> 
     };
   }
 
+  // Workflow stage (read-only): a changed candidate reads as DRAFT without
+  // persisting the reconciliation — status has no side effects.
+  const workflow = await loadWorkflowState(projectRoot);
+  let stage: string | null = null;
+  let release: { releaseCandidateId: string } | null = null;
+  let deployment: { deploymentId: string } | null = null;
+  let candidateInvalidated = false;
+  if (workflow !== undefined && validation.candidateSha256 !== undefined) {
+    candidateInvalidated = workflow.candidate.candidateSha256 !== validation.candidateSha256;
+    stage = candidateInvalidated ? "DRAFT" : workflow.stage;
+    if (!candidateInvalidated && workflow.remote?.releaseCandidateId !== undefined) {
+      release = { releaseCandidateId: workflow.remote.releaseCandidateId };
+    }
+    const lastDeployment = workflow.remote?.deploymentIds?.at(-1);
+    if (!candidateInvalidated && lastDeployment !== undefined) {
+      deployment = { deploymentId: lastDeployment };
+    }
+  }
+
   const payload = {
     ok: true,
     agentId: binding.agentId,
@@ -57,8 +76,10 @@ export async function runStatus(io: CliIO, flags: GlobalFlags): Promise<number> 
     remoteDrift,
     validationOk: validation.ok,
     evidence,
-    release: null,
-    deployment: null,
+    stage,
+    candidateInvalidated,
+    release,
+    deployment,
   };
 
   emitResult(io, flags, payload, [
@@ -71,7 +92,8 @@ export async function runStatus(io: CliIO, flags: GlobalFlags): Promise<number> 
     `validation: ${validation.ok ? "pass" : "FAIL"}; evidence ${
       evidence.present ? (evidence.current ? "current" : "stale") : "none"
     }`,
-    `release:    none  deployment: none`,
+    `stage:      ${stage ?? "none"}${candidateInvalidated ? " (prior evidence invalidated by source change)" : ""}`,
+    `release:    ${release?.releaseCandidateId ?? "none"}  deployment: ${deployment?.deploymentId ?? "none"}`,
   ]);
   return 0;
 }

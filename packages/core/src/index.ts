@@ -42,6 +42,25 @@ export {
   type SemanticDiffResult,
 } from "./diff/semantic-diff.js";
 export {
+  CHANGE_STATES,
+  changeSuccessors,
+  decideChangeTransition,
+  decideDeploymentTransition,
+  DEPLOYMENT_STATES,
+  deploymentSuccessors,
+  type TransitionDecision,
+} from "./lifecycle/lifecycle.js";
+export {
+  applyTransition,
+  assertWorkflowStateValid,
+  initialWorkflowState,
+  loadWorkflowState,
+  reconcileCandidate,
+  saveWorkflowState,
+  WORKFLOW_STATE_PATH,
+  type CandidateIdentity,
+} from "./lifecycle/workflow-state.js";
+export {
   evaluateReleasePolicy,
   type PolicyEvaluationInput,
   type PolicyEvaluationResult,

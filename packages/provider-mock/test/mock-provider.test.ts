@@ -128,12 +128,19 @@ describe("MockManagementProvider", () => {
     });
   });
 
-  it("fails closed with typed UNAVAILABLE for later-work-package operations", async () => {
+  it("fails closed with typed UNAVAILABLE for operations of later work packages", async () => {
     await provider.seedFromFixture(HELPDESK);
     await expect(
-      provider.createDraft(
+      provider.createEvaluationRun(
         { requestId: "r", idempotencyKey: "k" },
-        { agentId: "agent_mock_helpdesk" },
+        {
+          agentId: "agent_mock_helpdesk",
+          candidateSha256: `sha256:${"a".repeat(64)}`,
+          suiteSha256: `sha256:${"b".repeat(64)}`,
+          suitePaths: [],
+          mode: "fixture",
+          repetitions: 1,
+        },
       ),
     ).rejects.toMatchObject({ code: "UNAVAILABLE" });
     await expect(provider.getTrace(ctx(), "t", 1024)).rejects.toMatchObject({

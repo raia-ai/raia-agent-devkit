@@ -13,6 +13,8 @@ export type DevkitErrorCode =
   | "SECRET_DETECTED"
   | "LOCK_INVALID"
   | "LOCK_DRIFT"
+  | "INVALID_TRANSITION"
+  | "EVIDENCE_MISMATCH"
   | "CANONICALIZATION_ERROR"
   | "IO_ERROR";
 

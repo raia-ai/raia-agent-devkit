@@ -5,122 +5,27 @@
  * exit 3 when blockers remain.
  */
 import path from "node:path";
-import {
-  diffManifests,
-  evaluateReleasePolicy,
-  hashCanonical,
-  loadManifest,
-  loadReleasePolicy,
-  parseLock,
-  validateProject,
-  type PolicyEvaluationInput,
-} from "@raia/core";
-import type { EvaluationRunResult } from "@raia/eval-engine";
-import type { BaselineComparison } from "@raia/eval-engine";
-import { EXIT, UsageError } from "../exit-codes.js";
+import { hashCanonical } from "@raia/core";
+import { EXIT } from "../exit-codes.js";
 import { emitResult, type CliIO, type GlobalFlags } from "../io.js";
-import { readBinding, readTextIfExists, writeFileAtomic } from "../project-files.js";
-import { operationContext, providerForBinding } from "../provider.js";
-import { snapshotFromExport, snapshotFromLocal } from "../snapshots.js";
+import { writeFileAtomic } from "../project-files.js";
+import { aggregateReadiness } from "../readiness.js";
 
 const REVIEW_JSON = "reports/latest/review.json";
 const REVIEW_MD = "reports/latest/review.md";
-const EVALUATION_JSON = "reports/latest/evaluation.json";
 
 export async function runReview(io: CliIO, flags: GlobalFlags): Promise<number> {
   const projectRoot = io.cwd;
-  const binding = await readBinding(projectRoot);
-  if (binding === undefined) {
-    throw new UsageError("Not a raia project (missing .raia/project.json). Run `raia init` first.");
-  }
-  const lockRaw = await readTextIfExists(path.join(projectRoot, "raia.lock.json"));
-  if (lockRaw === undefined) {
-    throw new UsageError("Missing raia.lock.json; run `raia init` first.");
-  }
-  const lock = parseLock(lockRaw);
-  const baseVersionId = lock.remote?.baseVersionId;
-
-  const validation = await validateProject(projectRoot);
-  const local = await loadManifest(projectRoot);
-
-  // Semantic diff and remote drift against the lock's base version.
-  const provider = providerForBinding(projectRoot, binding);
-  const exported = await provider.exportAgent(operationContext(), binding.agentId, baseVersionId);
-  const { changes, risk } = diffManifests(snapshotFromExport(exported), snapshotFromLocal(local));
-  const remoteSummary = await provider.listAgents(operationContext(), binding.workspaceId);
-  const remoteCurrent = remoteSummary.items.find((agent) => agent.id === binding.agentId);
-  const drift = {
-    local: lock.manifestSha256 !== local.manifestSha256,
-    remote:
-      remoteCurrent !== undefined &&
-      baseVersionId !== undefined &&
-      remoteCurrent.currentVersionId !== baseVersionId,
-  };
-
-  // Evaluation evidence must be bound to the exact current candidate.
-  let evaluation: PolicyEvaluationInput["evaluation"];
-  let evaluationSummary: {
-    runId: string;
-    evidenceSha256: string;
-    gatePassed: boolean;
-    bound: boolean;
-  } | null = null;
-  const evaluationRaw = await readTextIfExists(path.join(projectRoot, EVALUATION_JSON));
-  if (evaluationRaw !== undefined) {
-    const run = JSON.parse(evaluationRaw) as EvaluationRunResult & {
-      comparison?: BaselineComparison;
-    };
-    const bound = run.candidateSha256 === validation.candidateSha256;
-    evaluationSummary = {
-      runId: run.runId,
-      evidenceSha256: run.evidenceSha256,
-      gatePassed: run.gate.passed,
-      bound,
-    };
-    if (bound) {
-      evaluation = {
-        suitesRun: run.suites.map((suite) => suite.suitePath),
-        executedTags: [...new Set(run.suites.flatMap((s) => s.cases.flatMap((c) => c.tags)))],
-        passRate: run.totals.passRate,
-        gatePassed: run.gate.passed,
-        regressionCount: run.comparison?.regressions.length,
-      };
-    }
-  }
-
-  const policyPath = local.manifest.spec.deployment?.releasePolicy;
-  if (policyPath === undefined) {
-    throw new UsageError(
-      "The manifest declares no release policy (spec.deployment.releasePolicy).",
-    );
-  }
-  const policy = await loadReleasePolicy(projectRoot, policyPath);
-  const policyResult = evaluateReleasePolicy(policy.policy, {
-    validation: {
-      ok: validation.ok,
-      findingCodes: validation.findings.map((finding) => finding.code),
-    },
-    drift,
-    risk,
-    evaluation,
-  });
-
-  const blockers = policyResult.requirements
-    .filter((requirement) => !requirement.satisfied)
-    .map((requirement) => `${requirement.id}: ${requirement.message}`);
-  if (evaluationSummary !== null && !evaluationSummary.bound) {
-    blockers.push(
-      "evaluation.evidence: existing evaluation report is bound to a different candidate; re-run `raia test`",
-    );
-  }
-  const ready = blockers.length === 0;
+  const aggregate = await aggregateReadiness(projectRoot);
+  const { validation, changes, risk, drift, evaluationSummary, policyResult, blockers, ready } =
+    aggregate;
 
   const reviewPayload = {
     ready,
     candidateSha256: validation.candidateSha256 ?? null,
-    manifestSha256: local.manifestSha256,
+    manifestSha256: aggregate.local.manifestSha256,
     lockSha256: validation.lockSha256 ?? null,
-    baseVersionId: baseVersionId ?? null,
+    baseVersionId: aggregate.baseVersionId,
     risk,
     changeCount: changes.length,
     changes,
@@ -131,7 +36,7 @@ export async function runReview(io: CliIO, flags: GlobalFlags): Promise<number> 
       evidenceSha256: validation.evidenceSha256 ?? null,
     },
     evaluation: evaluationSummary,
-    policy: { name: policy.policy.metadata.name, requirements: policyResult.requirements },
+    policy: { name: aggregate.policyName, requirements: policyResult.requirements },
     blockers,
   };
   const evidenceSha256 = hashCanonical(reviewPayload);
@@ -146,7 +51,7 @@ export async function runReview(io: CliIO, flags: GlobalFlags): Promise<number> 
     "",
     `- Ready: **${ready ? "YES" : "NO"}**`,
     `- Candidate: ${reviewPayload.candidateSha256 ?? "unknown"}`,
-    `- Risk: ${risk} (${changes.length} semantic change(s) vs base ${baseVersionId ?? "?"})`,
+    `- Risk: ${risk} (${changes.length} semantic change(s) vs base ${aggregate.baseVersionId})`,
     `- Validation: ${validation.ok ? "pass" : "FAIL"}`,
     `- Evaluation: ${
       evaluationSummary === null
