@@ -1,0 +1,39 @@
+{
+  "sourceUrl": "https://api.raia2.com/api/external/docs/openapi.json",
+  "retrievedAt": "2026-07-27",
+  "rawSha256": "fabbd26bf357ed184896d80a6ffd36c6f4873b42e8ae457ea0d0ae7a2c377cda",
+  "normalizedSha256": "a76a1b2a1054f6a6c46443b60625da03667c9238f7559d547e9bdb94a44fb188",
+  "normalizer": "normalize_vendor_openapi.py",
+  "profile": "external-openapi-v1",
+  "selectedPaths": [
+    "/external/conversations",
+    "/external/conversations/start",
+    "/external/conversations/states",
+    "/external/conversations/{id}",
+    "/external/conversations/{id}/message-files/upload-url",
+    "/external/conversations/{id}/message-files/{fileId}/signed-url",
+    "/external/conversations/{id}/messages",
+    "/external/conversations/{id}/messages/async",
+    "/external/conversations/{id}/messages/{questionMessageId}/response-on",
+    "/external/conversations/{id}/mode",
+    "/external/conversations/{id}/send-manual-message"
+  ],
+  "includedComponentCounts": {
+    "securitySchemes": 3,
+    "schemas": 35
+  },
+  "changes": [
+    {
+      "path": "paths",
+      "change": "Projected 11 /external/conversations... paths and their transitive component references for the external-openapi-v1 runtime profile."
+    },
+    {
+      "path": "components.schemas.EntityNotFoundErrorDTO.properties.name",
+      "change": "Removed default 'ENTITY_NOT_FOUND_ERROR' because it contradicts declared type 'object'."
+    },
+    {
+      "path": "components.schemas.ForbiddenErrorDTO.properties.name",
+      "change": "Removed default 'FORBIDDEN_ERROR' because it contradicts declared type 'object'."
+    }
+  ]
+}

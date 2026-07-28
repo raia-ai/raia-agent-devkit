@@ -1,0 +1,7 @@
+{
+  "assistantMessage": "Open the carrier link in your shipping confirmation and check the latest scan. If there is no update for two business days, contact us with your order ID so we can investigate.",
+  "toolCalls": [],
+  "finalState": "guidance-provided",
+  "latencyMs": 240,
+  "costUsd": 0.0013
+}

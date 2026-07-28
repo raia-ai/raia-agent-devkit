@@ -1,0 +1,92 @@
+apiVersion: devkit.raia.ai/v1alpha1
+kind: EvaluationSuite
+metadata:
+  name: helpdesk-regression
+  description: Behavioral regressions derived from reviewed support scenarios.
+  tags:
+    - regression
+    - release-gate
+spec:
+  defaults:
+    mode: fixture
+    repetitions: 1
+    timeoutMs: 20000
+    concurrency: 2
+    seed: 42
+  cases:
+    - id: escalates-fraud-claim
+      description: A suspected fraud claim is handed to the configured human queue.
+      criticality: blocking
+      tags:
+        - escalation
+        - release-gate
+      conversation:
+        turns:
+          - role: user
+            content: I did not place this order. I think someone took over my account.
+            fixtureRef: fixtures/fraud-escalation.json
+      expectedStates:
+        - escalation-required
+        - human-handoff-created
+      assertions:
+        - id: reaches-handoff-state
+          type: conversation-state
+          target: final-state
+          expected: human-handoff-created
+          critical: true
+        - id: does-not-claim-resolution
+          type: regex
+          target: last-assistant-message
+          expected: '^(?!.*(fixed|resolved|refunded)).*$'
+          critical: true
+    - id: rejects-malformed-order-id
+      description: A malformed order ID does not trigger the order service.
+      criticality: high
+      tags:
+        - tools
+        - validation
+      conversation:
+        turns:
+          - role: user
+            content: Please check order 123.
+            fixtureRef: fixtures/malformed-order.json
+      toolPolicy:
+        forbidden:
+          - lookup-order
+      assertions:
+        - id: no-order-call
+          type: tool-not-called
+          target: tool-trajectory
+          toolName: lookup-order
+          critical: true
+        - id: requests-valid-id
+          type: contains
+          target: last-assistant-message
+          expected: ORD-
+          critical: false
+    - id: concise-next-step
+      description: The final answer contains a clear next step without excessive length.
+      criticality: standard
+      tags:
+        - quality
+      conversation:
+        turns:
+          - role: user
+            content: My package says shipped. What should I do now?
+            fixtureRef: fixtures/shipped-next-step.json
+      assertions:
+        - id: includes-next-step
+          type: contains
+          target: last-assistant-message
+          expected: carrier
+          critical: false
+        - id: does-not-invent-date
+          type: regex
+          target: last-assistant-message
+          expected: '^(?!.*\\b[0-9]{4}-[0-9]{2}-[0-9]{2}\\b).*$'
+          critical: true
+        - id: response-latency
+          type: latency
+          target: run
+          maximum: 5000
+          critical: false

@@ -1,0 +1,789 @@
+openapi: 3.1.0
+info:
+  title: raia Agent Lifecycle Management API
+  version: 0.1.0-draft
+  description: >-
+    Proposed management-plane API for the raia Agent DevKit. This contract is
+    not part of the currently documented conversation API. All mutations are
+    idempotent, version-bound, scoped, and auditable.
+servers:
+  - url: https://api.raia2.com/agent-devkit/v1
+    description: Illustrative proposed US lifecycle endpoint; not currently available
+  - url: https://api-eu.raia2.com/agent-devkit/v1
+    description: Illustrative proposed EU lifecycle endpoint; not currently available
+security:
+  - oauth2: [agent:read]
+tags:
+  - name: Identity
+  - name: Discovery
+  - name: Agents
+  - name: Evaluations
+  - name: Releases
+  - name: Deployments
+  - name: Traces
+paths:
+  /me:
+    get:
+      tags: [Identity]
+      operationId: getCurrentIdentity
+      summary: Return the authenticated principal and effective scopes
+      responses:
+        '200':
+          description: Authenticated identity
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Identity'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /workspaces:
+    get:
+      tags: [Discovery]
+      operationId: listWorkspaces
+      summary: List workspaces visible to the principal
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Workspace page
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Workspace'
+                  nextCursor:
+                    type: [string, 'null']
+  /workspaces/{workspaceId}/agents:
+    get:
+      tags: [Discovery]
+      operationId: listAgents
+      summary: List agents in a workspace
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Agent page
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AgentSummary'
+                  nextCursor:
+                    type: [string, 'null']
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /agents/{agentId}/export:
+    get:
+      tags: [Agents]
+      operationId: exportAgent
+      summary: Export a canonical agent manifest and resolved lock data
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+        - name: versionId
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Canonical export
+          headers:
+            ETag:
+              schema:
+                type: string
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentExport'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /agents/{agentId}/change-plans:
+    post:
+      tags: [Agents]
+      operationId: createChangePlan
+      summary: Calculate a non-mutating semantic change plan
+      security:
+        - oauth2: [agent:read]
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePlanRequest'
+      responses:
+        '200':
+          description: Change plan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangePlan'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /agents/{agentId}/drafts:
+    post:
+      tags: [Agents]
+      operationId: createAgentDraft
+      summary: Create a version-bound draft
+      security:
+        - oauth2: [agent:draft]
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DraftRequest'
+      responses:
+        '201':
+          description: Draft created
+          headers:
+            ETag:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Draft'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /evaluation-runs:
+    post:
+      tags: [Evaluations]
+      operationId: createEvaluationRun
+      summary: Start an evaluation against an exact candidate hash
+      security:
+        - oauth2: [eval:run]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvaluationRunRequest'
+      responses:
+        '202':
+          description: Evaluation accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationRun'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /evaluation-runs/{runId}:
+    get:
+      tags: [Evaluations]
+      operationId: getEvaluationRun
+      summary: Get evaluation status and results
+      security:
+        - oauth2: [eval:read]
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '200':
+          description: Evaluation run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationRun'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /release-candidates:
+    post:
+      tags: [Releases]
+      operationId: createReleaseCandidate
+      summary: Create an immutable candidate from exact evidence hashes
+      security:
+        - oauth2: [release:create]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReleaseCandidateRequest'
+      responses:
+        '201':
+          description: Immutable release candidate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReleaseCandidate'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /deployments:
+    post:
+      tags: [Deployments]
+      operationId: createDeployment
+      summary: Deploy an approved immutable release candidate
+      security:
+        - oauth2: [deployment:promote]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeploymentRequest'
+      responses:
+        '202':
+          description: Deployment queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deployment'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /deployments/{deploymentId}:
+    get:
+      tags: [Deployments]
+      operationId: getDeployment
+      summary: Get deployment and health state
+      security:
+        - oauth2: [deployment:read]
+      parameters:
+        - $ref: '#/components/parameters/DeploymentId'
+      responses:
+        '200':
+          description: Deployment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deployment'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /deployments/{deploymentId}/rollback:
+    post:
+      tags: [Deployments]
+      operationId: rollbackDeployment
+      summary: Roll back to the deployment's captured rollback target
+      security:
+        - oauth2: [deployment:rollback]
+      parameters:
+        - $ref: '#/components/parameters/DeploymentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  minLength: 1
+                  maxLength: 1000
+      responses:
+        '202':
+          description: Rollback queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deployment'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /agents/{agentId}/traces:
+    get:
+      tags: [Traces]
+      operationId: listAgentTraces
+      summary: List redacted traces for an agent and optional version
+      security:
+        - oauth2: [trace:read]
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+        - name: versionId
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Redacted trace page
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TraceSummary'
+                  nextCursor:
+                    type: [string, 'null']
+  /traces/{traceId}:
+    get:
+      tags: [Traces]
+      operationId: getTrace
+      summary: Get a size-capped redacted trace
+      security:
+        - oauth2: [trace:read]
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+      responses:
+        '200':
+          description: Redacted trace detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trace'
+        '404':
+          $ref: '#/components/responses/NotFound'
+components:
+  securitySchemes:
+    oauth2:
+      type: oauth2
+      description: Interactive OAuth or device-flow access for users.
+      flows:
+        authorizationCode:
+          authorizationUrl: https://auth.raia.ai/oauth/authorize
+          tokenUrl: https://auth.raia.ai/oauth/token
+          scopes:
+            agent:read: Read agent definitions and versions
+            agent:draft: Create version-bound drafts
+            eval:read: Read evaluation evidence
+            eval:run: Start evaluation runs
+            release:create: Create immutable release candidates
+            deployment:read: Read deployment status
+            deployment:promote: Promote to an authorized environment
+            deployment:rollback: Roll back an authorized deployment
+            trace:read: Read redacted traces
+    serviceToken:
+      type: http
+      scheme: bearer
+      bearerFormat: scoped workspace service token
+      description: CI-only scoped service token; never an Agent Secret Key.
+  parameters:
+    WorkspaceId:
+      name: workspaceId
+      in: path
+      required: true
+      schema:
+        type: string
+    AgentId:
+      name: agentId
+      in: path
+      required: true
+      schema:
+        type: string
+    RunId:
+      name: runId
+      in: path
+      required: true
+      schema:
+        type: string
+    DeploymentId:
+      name: deploymentId
+      in: path
+      required: true
+      schema:
+        type: string
+    TraceId:
+      name: traceId
+      in: path
+      required: true
+      schema:
+        type: string
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Unique key for this logical mutation; safe retries return the original result.
+      schema:
+        type: string
+        minLength: 16
+        maxLength: 200
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: ETag of the explicit base version.
+      schema:
+        type: string
+  headers:
+    RequestId:
+      schema:
+        type: string
+  responses:
+    Unauthorized:
+      description: Authentication missing or invalid
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Forbidden:
+      description: Principal lacks the required scope or environment permission
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: Resource not found or not visible to the principal
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Conflict:
+      description: Stale base version, ETag mismatch, idempotency mismatch, or invalid state transition
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    ValidationError:
+      description: Schema, policy, or evidence validation failed
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  schemas:
+    Identity:
+      type: object
+      additionalProperties: false
+      required: [principalId, principalType, scopes]
+      properties:
+        principalId: { type: string }
+        principalType: { type: string, enum: [user, service] }
+        email: { type: [string, 'null'], format: email }
+        scopes:
+          type: array
+          items: { type: string }
+        workspaceIds:
+          type: array
+          items: { type: string }
+    Workspace:
+      type: object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        region: { type: string, enum: [us, eu] }
+    AgentSummary:
+      type: object
+      additionalProperties: false
+      required: [id, workspaceId, name, currentVersionId]
+      properties:
+        id: { type: string }
+        workspaceId: { type: string }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        currentVersionId: { type: string }
+        etag: { type: string }
+        updatedAt: { type: string, format: date-time }
+    AgentManifest:
+      type: object
+      description: Must validate against agent-manifest.schema.json.
+      additionalProperties: true
+    AgentLock:
+      type: object
+      description: Must validate against agent-lock.schema.json.
+      additionalProperties: true
+    ArtifactFile:
+      type: object
+      additionalProperties: false
+      required: [path, sha256, encoding, content]
+      properties:
+        path:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Normalized POSIX path relative to the project root.
+        sha256: { $ref: '#/components/schemas/Sha256' }
+        encoding:
+          type: string
+          enum: [utf8, base64]
+        mediaType:
+          type: string
+          maxLength: 200
+        content:
+          type: string
+          maxLength: 10485760
+          description: UTF-8 text or base64 bytes according to encoding; never contains secret values. Implementations also enforce a configurable total request-size limit.
+    AgentBundle:
+      type: object
+      additionalProperties: false
+      required: [manifest, lock, artifacts]
+      properties:
+        manifest: { $ref: '#/components/schemas/AgentManifest' }
+        lock: { $ref: '#/components/schemas/AgentLock' }
+        artifacts:
+          type: array
+          maxItems: 1000
+          items: { $ref: '#/components/schemas/ArtifactFile' }
+    AgentExport:
+      type: object
+      additionalProperties: false
+      required: [workspaceId, agentId, versionId, etag, bundle]
+      properties:
+        workspaceId: { type: string }
+        agentId: { type: string }
+        versionId: { type: string }
+        etag: { type: string }
+        bundle: { $ref: '#/components/schemas/AgentBundle' }
+    ChangePlanRequest:
+      type: object
+      additionalProperties: false
+      required: [baseVersionId, manifestSha256, bundle]
+      properties:
+        baseVersionId: { type: string }
+        manifestSha256: { $ref: '#/components/schemas/Sha256' }
+        bundle: { $ref: '#/components/schemas/AgentBundle' }
+    ChangePlan:
+      type: object
+      additionalProperties: false
+      required: [planId, baseVersionId, manifestSha256, risk, changes, createdAt]
+      properties:
+        planId: { type: string }
+        baseVersionId: { type: string }
+        manifestSha256: { $ref: '#/components/schemas/Sha256' }
+        risk: { type: string, enum: [low, medium, high, critical] }
+        changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/SemanticChange'
+        warnings:
+          type: array
+          items: { type: string }
+        createdAt: { type: string, format: date-time }
+    SemanticChange:
+      type: object
+      additionalProperties: false
+      required: [path, category, operation, severity, breaking, reason]
+      properties:
+        path: { type: string }
+        category:
+          type: string
+          enum: [metadata, instructions, model, skill, function, knowledge, escalation, guardrail, integration, evaluation, deployment]
+        operation: { type: string, enum: [add, remove, replace] }
+        before: {}
+        after: {}
+        severity: { type: string, enum: [info, low, medium, high, critical] }
+        breaking: { type: boolean }
+        reason: { type: string }
+        affectedCapabilities:
+          type: array
+          items: { type: string }
+    DraftRequest:
+      type: object
+      additionalProperties: false
+      required: [baseVersionId, manifestSha256, bundle]
+      properties:
+        baseVersionId: { type: string }
+        manifestSha256: { $ref: '#/components/schemas/Sha256' }
+        bundle: { $ref: '#/components/schemas/AgentBundle' }
+        clientMetadata:
+          type: object
+          additionalProperties: true
+    Draft:
+      type: object
+      additionalProperties: false
+      required: [id, agentId, baseVersionId, manifestSha256, state, createdAt, etag]
+      properties:
+        id: { type: string }
+        agentId: { type: string }
+        baseVersionId: { type: string }
+        manifestSha256: { $ref: '#/components/schemas/Sha256' }
+        state: { type: string, enum: [DRAFT, PLANNED, VALIDATED, EVALUATED, APPROVED, REJECTED] }
+        createdAt: { type: string, format: date-time }
+        etag: { type: string }
+    EvaluationRunRequest:
+      type: object
+      additionalProperties: false
+      required: [agentId, candidateSha256, suiteSha256, suitePaths, mode]
+      properties:
+        agentId: { type: string }
+        draftId: { type: [string, 'null'] }
+        candidateSha256: { $ref: '#/components/schemas/Sha256' }
+        suiteSha256: { $ref: '#/components/schemas/Sha256' }
+        suitePaths:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { type: string, minLength: 1, maxLength: 500 }
+        mode: { type: string, enum: [fixture, live] }
+        repetitions: { type: integer, minimum: 1, maximum: 20, default: 1 }
+        seed: { type: integer, minimum: 0 }
+    EvaluationRun:
+      type: object
+      additionalProperties: false
+      required: [id, agentId, candidateSha256, suiteSha256, state, createdAt]
+      properties:
+        id: { type: string }
+        agentId: { type: string }
+        candidateSha256: { $ref: '#/components/schemas/Sha256' }
+        suiteSha256: { $ref: '#/components/schemas/Sha256' }
+        state: { type: string, enum: [QUEUED, RUNNING, PASSED, FAILED, ERROR, CANCELLED] }
+        summary:
+          type: [object, 'null']
+          additionalProperties: true
+        results:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        createdAt: { type: string, format: date-time }
+        completedAt: { type: [string, 'null'], format: date-time }
+    ReleaseCandidateRequest:
+      type: object
+      additionalProperties: false
+      required: [agentId, baseVersionId, candidateSha256, manifestSha256, lockSha256, evidence]
+      properties:
+        agentId: { type: string }
+        draftId: { type: [string, 'null'] }
+        baseVersionId: { type: string }
+        candidateSha256: { $ref: '#/components/schemas/Sha256' }
+        manifestSha256: { $ref: '#/components/schemas/Sha256' }
+        lockSha256: { $ref: '#/components/schemas/Sha256' }
+        gitCommit: { type: [string, 'null'] }
+        evidence:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            additionalProperties: false
+            required: [type, id, sha256]
+            properties:
+              type: { type: string, enum: [validation, evaluation, approval] }
+              id: { type: string }
+              sha256: { $ref: '#/components/schemas/Sha256' }
+    ReleaseCandidate:
+      type: object
+      additionalProperties: false
+      required: [id, agentId, baseVersionId, candidateSha256, manifestSha256, state, createdAt]
+      properties:
+        id: { type: string }
+        agentId: { type: string }
+        baseVersionId: { type: string }
+        candidateSha256: { $ref: '#/components/schemas/Sha256' }
+        manifestSha256: { $ref: '#/components/schemas/Sha256' }
+        state: { type: string, enum: [RELEASED, REVOKED] }
+        createdAt: { type: string, format: date-time }
+    DeploymentRequest:
+      type: object
+      additionalProperties: false
+      required: [releaseCandidateId, environment]
+      properties:
+        releaseCandidateId: { type: string }
+        environment: { type: string, enum: [development, staging, production] }
+        reason: { type: [string, 'null'], maxLength: 1000 }
+    Deployment:
+      type: object
+      additionalProperties: false
+      required: [id, releaseCandidateId, environment, state, createdAt]
+      properties:
+        id: { type: string }
+        releaseCandidateId: { type: string }
+        environment: { type: string, enum: [development, staging, production] }
+        state:
+          type: string
+          enum: [QUEUED, DEPLOYING, HEALTHY, FAILED, ROLLING_BACK, ROLLED_BACK, SUPERSEDED]
+        rollbackTargetId: { type: [string, 'null'] }
+        health:
+          type: [object, 'null']
+          additionalProperties: true
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    TraceSummary:
+      type: object
+      additionalProperties: false
+      required: [id, agentId, versionId, startedAt, outcome]
+      properties:
+        id: { type: string }
+        agentId: { type: string }
+        versionId: { type: string }
+        startedAt: { type: string, format: date-time }
+        outcome: { type: string, enum: [success, failure, escalated, unknown] }
+        tags:
+          type: array
+          items: { type: string }
+    Trace:
+      allOf:
+        - $ref: '#/components/schemas/TraceSummary'
+        - type: object
+          required: [events, redactions]
+          properties:
+            events:
+              type: array
+              maxItems: 1000
+              items:
+                type: object
+                additionalProperties: true
+            redactions:
+              type: array
+              items: { type: string }
+            truncated: { type: boolean }
+    Sha256:
+      type: string
+      pattern: '^sha256:[a-f0-9]{64}$'
+    Problem:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, requestId]
+      properties:
+        type: { type: string, format: uri-reference }
+        title: { type: string }
+        status: { type: integer, minimum: 400, maximum: 599 }
+        detail: { type: [string, 'null'] }
+        requestId: { type: string }
+        code: { type: [string, 'null'] }
+        errors:
+          type: array
+          items:
+            type: object
+            additionalProperties: true

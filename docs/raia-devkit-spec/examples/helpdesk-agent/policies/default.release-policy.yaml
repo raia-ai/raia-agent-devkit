@@ -1,0 +1,30 @@
+apiVersion: devkit.raia.ai/v1alpha1
+kind: ReleasePolicy
+metadata:
+  name: default
+  description: Pilot release gate for the helpdesk agent.
+spec:
+  validation:
+    requireSchema: true
+    requireSecretScan: true
+    requireNoDrift: true
+    maximumRisk: high
+  evaluation:
+    requiredSuites:
+      - evals/smoke.eval.yaml
+      - evals/regression.eval.yaml
+    requiredTags:
+      - release-gate
+    minimumPassRate: 0.95
+    blockOnCriticalFailure: true
+    maximumRegressionCount: 0
+  approval:
+    stagingApprovals: 0
+    productionApprovals: 1
+    requiredRoles:
+      - agent-owner
+  environments:
+    claudeCodeAllowed:
+      - development
+      - staging
+    requireImmutableRelease: true

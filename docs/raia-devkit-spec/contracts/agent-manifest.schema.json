@@ -1,0 +1,556 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.raia.ai/devkit/v1alpha1/agent-manifest.schema.json",
+  "title": "raia Agent Manifest",
+  "description": "Canonical developer-facing definition of a versioned raia agent.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "properties": {
+    "apiVersion": {
+      "const": "devkit.raia.ai/v1alpha1"
+    },
+    "kind": {
+      "const": "Agent"
+    },
+    "metadata": {
+      "$ref": "#/$defs/metadata"
+    },
+    "spec": {
+      "$ref": "#/$defs/agentSpec"
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 63,
+      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/identifier"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "workspaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "agentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "labels": {
+          "$ref": "#/$defs/stringMap"
+        },
+        "annotations": {
+          "$ref": "#/$defs/stringMap"
+        }
+      }
+    },
+    "agentSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["instructions", "model"],
+      "properties": {
+        "persona": {
+          "$ref": "#/$defs/persona"
+        },
+        "instructions": {
+          "$ref": "#/$defs/artifactSource"
+        },
+        "model": {
+          "$ref": "#/$defs/modelConfig"
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/skill"
+          },
+          "default": []
+        },
+        "functions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/functionDefinition"
+          },
+          "default": []
+        },
+        "knowledge": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/knowledgePack"
+          },
+          "default": []
+        },
+        "escalation": {
+          "$ref": "#/$defs/escalation"
+        },
+        "guardrails": {
+          "$ref": "#/$defs/guardrails"
+        },
+        "integrations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/integration"
+          },
+          "default": []
+        },
+        "evaluations": {
+          "$ref": "#/$defs/evaluationConfig"
+        },
+        "deployment": {
+          "$ref": "#/$defs/deploymentDefaults"
+        }
+      }
+    },
+    "persona": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "role": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "tone": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "uniqueItems": true,
+          "maxItems": 12
+        },
+        "brandVoice": {
+          "$ref": "#/$defs/artifactSource"
+        }
+      }
+    },
+    "modelConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["modelId"],
+      "properties": {
+        "modelId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "temperature": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "maxOutputTokens": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200000
+        },
+        "reasoning": {
+          "type": "string",
+          "enum": ["disabled", "low", "medium", "high"]
+        },
+        "responseFormat": {
+          "type": "string",
+          "enum": ["text", "json"]
+        }
+      }
+    },
+    "skill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "source"],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/identifier"
+        },
+        "source": {
+          "$ref": "#/$defs/resourceReference"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "configuration": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "functionDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "description", "inputSchema", "handler"],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/identifier"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "inputSchema": {
+          "type": "object",
+          "description": "JSON Schema for function input."
+        },
+        "outputSchema": {
+          "type": "object",
+          "description": "Optional JSON Schema for function output."
+        },
+        "handler": {
+          "$ref": "#/$defs/functionHandler"
+        },
+        "riskLevel": {
+          "type": "string",
+          "enum": ["low", "medium", "high", "critical"],
+          "default": "medium"
+        },
+        "requiresConfirmation": {
+          "type": "boolean",
+          "default": false
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 120000,
+          "default": 30000
+        }
+      }
+    },
+    "functionHandler": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["integration", "webhook", "mcp", "raia-skill"]
+        },
+        "integrationRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "endpoint": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        },
+        "mcpServerRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "mcpTool": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "skillRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "credential": {
+          "$ref": "#/$defs/secretReference"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "integration"
+              }
+            }
+          },
+          "then": {
+            "required": ["integrationRef"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "webhook"
+              }
+            }
+          },
+          "then": {
+            "required": ["endpoint"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "mcp"
+              }
+            }
+          },
+          "then": {
+            "required": ["mcpServerRef", "mcpTool"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "raia-skill"
+              }
+            }
+          },
+          "then": {
+            "required": ["skillRef"]
+          }
+        }
+      ]
+    },
+    "knowledgePack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "source"],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/identifier"
+        },
+        "source": {
+          "$ref": "#/$defs/resourceReference"
+        },
+        "retrieval": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "topK": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "minimumScore": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "queryRewrite": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "escalation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "conditions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "maxItems": 50
+        },
+        "destinations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "uniqueItems": true
+        },
+        "handoffMessage": {
+          "$ref": "#/$defs/artifactSource"
+        }
+      }
+    },
+    "guardrails": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "policyPacks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/resourceReference"
+          },
+          "default": []
+        },
+        "blockedTopics": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "uniqueItems": true
+        },
+        "piiHandling": {
+          "type": "string",
+          "enum": ["deny", "redact", "allow-by-policy"]
+        },
+        "promptInjectionDefense": {
+          "type": "string",
+          "enum": ["standard", "strict"]
+        }
+      }
+    },
+    "integration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "source"],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/identifier"
+        },
+        "source": {
+          "$ref": "#/$defs/resourceReference"
+        },
+        "credential": {
+          "$ref": "#/$defs/secretReference"
+        },
+        "configuration": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "evaluationConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["suites"],
+      "properties": {
+        "suites": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "uniqueItems": true
+        },
+        "requiredTags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "deploymentDefaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "defaultEnvironment": {
+          "type": "string",
+          "enum": ["development", "staging"],
+          "default": "staging"
+        },
+        "releasePolicy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      }
+    },
+    "artifactSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "inline": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "remoteRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      },
+      "oneOf": [
+        {
+          "required": ["inline"]
+        },
+        {
+          "required": ["file"]
+        },
+        {
+          "required": ["remoteRef"]
+        }
+      ]
+    },
+    "resourceReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["remoteRef"],
+      "properties": {
+        "remoteRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "checksum": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        }
+      }
+    },
+    "secretReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["secretRef"],
+      "properties": {
+        "secretRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "pattern": "^(env|vault|raia-secret)://"
+        }
+      }
+    },
+    "stringMap": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[A-Za-z0-9_.-]{1,100}$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 500
+      }
+    }
+  }
+}

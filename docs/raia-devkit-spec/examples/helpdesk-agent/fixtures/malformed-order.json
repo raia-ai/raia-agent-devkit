@@ -1,0 +1,7 @@
+{
+  "assistantMessage": "Please send the order ID in the format ORD- followed by six digits, for example ORD-123456.",
+  "toolCalls": [],
+  "finalState": "awaiting-valid-order-id",
+  "latencyMs": 180,
+  "costUsd": 0.0010
+}

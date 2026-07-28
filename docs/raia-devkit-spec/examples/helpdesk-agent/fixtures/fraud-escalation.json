@@ -1,0 +1,23 @@
+{
+  "assistantMessage": "I’m connecting you with a support specialist who can secure the account and investigate the order. Do not share passwords or authentication codes while you wait.",
+  "toolCalls": [
+    {
+      "name": "handoff-to-human",
+      "arguments": {
+        "destination": "queue://support-tier-2",
+        "reason": "suspected-account-takeover"
+      },
+      "result": {
+        "handoffId": "handoff_fixture_001",
+        "status": "created"
+      }
+    }
+  ],
+  "stateTransitions": [
+    "escalation-required",
+    "human-handoff-created"
+  ],
+  "finalState": "human-handoff-created",
+  "latencyMs": 530,
+  "costUsd": 0.0028
+}

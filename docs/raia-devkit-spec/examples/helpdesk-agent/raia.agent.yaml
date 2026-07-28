@@ -1,0 +1,116 @@
+apiVersion: devkit.raia.ai/v1alpha1
+kind: Agent
+metadata:
+  name: helpdesk-agent
+  description: Resolves common account and order questions and escalates sensitive cases.
+  workspaceId: ws_mock_acme
+  agentId: agent_mock_helpdesk
+  labels:
+    team: customer-experience
+    tier: pilot
+spec:
+  persona:
+    displayName: Acme Support
+    role: Customer support specialist
+    tone:
+      - clear
+      - calm
+      - concise
+    brandVoice:
+      file: prompts/brand-voice.md
+  instructions:
+    file: prompts/system.md
+  model:
+    modelId: provider/model-current
+    temperature: 0.2
+    maxOutputTokens: 1200
+    reasoning: medium
+    responseFormat: text
+  skills:
+    - name: answer-faq
+      source:
+        remoteRef: raia-skill://answer-faq
+        version: '3'
+      enabled: true
+    - name: handoff-to-human
+      source:
+        remoteRef: raia-skill://handoff-to-human
+        version: '2'
+      enabled: true
+  functions:
+    - name: lookup-order
+      description: Retrieve a customer's order after the customer provides an order ID.
+      inputSchema:
+        type: object
+        additionalProperties: false
+        required:
+          - orderId
+        properties:
+          orderId:
+            type: string
+            pattern: '^ORD-[0-9]{6}$'
+      outputSchema:
+        type: object
+        required:
+          - status
+        properties:
+          status:
+            type: string
+          estimatedDelivery:
+            type:
+              - string
+              - 'null'
+            format: date
+      handler:
+        type: integration
+        integrationRef: order-service
+        credential:
+          secretRef: raia-secret://integrations/order-service
+      riskLevel: low
+      requiresConfirmation: false
+      timeoutMs: 5000
+  knowledge:
+    - name: help-center
+      source:
+        remoteRef: raia-knowledge://help-center
+        version: '2026-07-01'
+      retrieval:
+        topK: 6
+        minimumScore: 0.72
+        queryRewrite: true
+  escalation:
+    enabled: true
+    conditions:
+      - The user asks to cancel a paid plan after the refund window.
+      - The user alleges fraud or account takeover.
+      - The agent cannot verify an order after two attempts.
+    destinations:
+      - queue://support-tier-2
+    handoffMessage:
+      inline: I’m connecting you with a support specialist who can continue from this conversation.
+  guardrails:
+    policyPacks:
+      - remoteRef: raia-policy://cx-baseline
+        version: '1'
+    blockedTopics:
+      - payment-card-secrets
+    piiHandling: redact
+    promptInjectionDefense: strict
+  integrations:
+    - name: order-service
+      source:
+        remoteRef: raia-integration://order-service
+        version: '4'
+      credential:
+        secretRef: raia-secret://integrations/order-service
+      configuration:
+        region: us
+  evaluations:
+    suites:
+      - evals/smoke.eval.yaml
+      - evals/regression.eval.yaml
+    requiredTags:
+      - release-gate
+  deployment:
+    defaultEnvironment: staging
+    releasePolicy: policies/default.release-policy.yaml

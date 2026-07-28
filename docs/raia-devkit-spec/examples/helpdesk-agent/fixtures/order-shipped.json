@@ -1,0 +1,18 @@
+{
+  "assistantMessage": "Order ORD-123456 has shipped. Check the carrier link in your order confirmation for the latest scan and delivery estimate.",
+  "toolCalls": [
+    {
+      "name": "lookup-order",
+      "arguments": {
+        "orderId": "ORD-123456"
+      },
+      "result": {
+        "status": "shipped",
+        "estimatedDelivery": "2026-07-30"
+      }
+    }
+  ],
+  "finalState": "resolved",
+  "latencyMs": 425,
+  "costUsd": 0.0021
+}

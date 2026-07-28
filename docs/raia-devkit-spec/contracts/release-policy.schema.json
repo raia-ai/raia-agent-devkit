@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.raia.ai/devkit/v1alpha1/release-policy.schema.json",
+  "title": "raia Agent Release Policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "properties": {
+    "apiVersion": {
+      "const": "devkit.raia.ai/v1alpha1"
+    },
+    "kind": {
+      "const": "ReleasePolicy"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1000
+        }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["validation", "evaluation", "approval", "environments"],
+      "properties": {
+        "validation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["requireSchema", "requireSecretScan", "requireNoDrift"],
+          "properties": {
+            "requireSchema": { "type": "boolean" },
+            "requireSecretScan": { "type": "boolean" },
+            "requireNoDrift": { "type": "boolean" },
+            "maximumRisk": {
+              "type": "string",
+              "enum": ["low", "medium", "high", "critical"]
+            }
+          }
+        },
+        "evaluation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["requiredSuites", "blockOnCriticalFailure"],
+          "properties": {
+            "requiredSuites": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "uniqueItems": true
+            },
+            "requiredTags": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "uniqueItems": true
+            },
+            "minimumPassRate": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "blockOnCriticalFailure": {
+              "type": "boolean"
+            },
+            "maximumRegressionCount": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "approval": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["stagingApprovals"],
+          "properties": {
+            "stagingApprovals": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 20
+            },
+            "productionApprovals": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20
+            },
+            "requiredRoles": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "uniqueItems": true
+            }
+          }
+        },
+        "environments": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["claudeCodeAllowed"],
+          "properties": {
+            "claudeCodeAllowed": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["development", "staging"]
+              },
+              "uniqueItems": true
+            },
+            "requireImmutableRelease": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        }
+      }
+    }
+  }
+}

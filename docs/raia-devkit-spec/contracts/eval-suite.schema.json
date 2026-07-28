@@ -1,0 +1,370 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.raia.ai/devkit/v1alpha1/eval-suite.schema.json",
+  "title": "raia Agent Evaluation Suite",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "properties": {
+    "apiVersion": {
+      "const": "devkit.raia.ai/v1alpha1"
+    },
+    "kind": {
+      "const": "EvaluationSuite"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/identifier"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "tags": {
+          "$ref": "#/$defs/stringArray"
+        }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cases"],
+      "properties": {
+        "defaults": {
+          "$ref": "#/$defs/defaults"
+        },
+        "cases": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/case"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+    },
+    "stringArray": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100
+      },
+      "uniqueItems": true
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["fixture", "live"],
+          "default": "fixture"
+        },
+        "repetitions": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 1
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 300000,
+          "default": 60000
+        },
+        "concurrency": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 1
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "description", "criticality", "conversation", "assertions"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "criticality": {
+          "type": "string",
+          "enum": ["informational", "standard", "high", "blocking"]
+        },
+        "tags": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "persona": {
+          "$ref": "#/$defs/persona"
+        },
+        "initialContext": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "conversation": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["turns"],
+              "properties": {
+                "turns": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "$ref": "#/$defs/turn"
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["simulator"],
+              "properties": {
+                "simulator": {
+                  "$ref": "#/$defs/simulator"
+                }
+              }
+            }
+          ]
+        },
+        "toolPolicy": {
+          "$ref": "#/$defs/toolPolicy"
+        },
+        "expectedStates": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "assertions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/assertion"
+          }
+        },
+        "businessMetrics": {
+          "type": "object",
+          "additionalProperties": {
+            "type": ["string", "number", "boolean", "null"]
+          }
+        }
+      }
+    },
+    "persona": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "goal": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "behavior": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "maxItems": 30
+        }
+      }
+    },
+    "turn": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "content"],
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": ["user", "assistant", "tool"]
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1
+        },
+        "toolName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "fixtureRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      }
+    },
+    "simulator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal", "maxTurns"],
+      "properties": {
+        "goal": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "maxTurns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30
+        },
+        "modelRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      }
+    },
+    "toolPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allowed": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "forbidden": {
+          "$ref": "#/$defs/stringArray"
+        }
+      }
+    },
+    "assertion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "contains",
+            "regex",
+            "json-schema",
+            "tool-call",
+            "tool-not-called",
+            "latency",
+            "cost",
+            "conversation-state",
+            "rubric"
+          ]
+        },
+        "target": {
+          "type": "string",
+          "enum": ["last-assistant-message", "conversation", "tool-trajectory", "final-state", "run"]
+        },
+        "expected": {},
+        "schema": {
+          "type": "object"
+        },
+        "toolName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "maximum": {
+          "type": "number"
+        },
+        "rubric": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "minimumScore": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "critical": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "json-schema"
+              }
+            }
+          },
+          "then": {
+            "required": ["schema"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": ["tool-call", "tool-not-called"]
+              }
+            }
+          },
+          "then": {
+            "required": ["toolName"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": ["latency", "cost"]
+              }
+            }
+          },
+          "then": {
+            "required": ["maximum"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "rubric"
+              }
+            }
+          },
+          "then": {
+            "required": ["rubric", "minimumScore"]
+          }
+        }
+      ]
+    }
+  }
+}
