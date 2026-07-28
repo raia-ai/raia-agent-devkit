@@ -1,0 +1,65 @@
+# Implementation Plan — WP0 and WP1
+
+Scope of this plan: **WP0 (Foundation)** and **WP1 (Contracts and core)** only, per
+`docs/raia-devkit-spec/CLAUDE_CODE_START_PROMPT.md`. Later work packages are listed
+only where a WP0/WP1 choice must not foreclose them.
+
+Normative sources: `docs/raia-devkit-spec/RAIA_AGENT_DEVKIT_BUILD_SPEC.md` (behavior,
+security), files under `docs/raia-devkit-spec/contracts/` (data shape),
+`docs/raia-devkit-spec/AGENT_LIFECYCLE_FRAMEWORK.md` (lifecycle rules).
+
+## WP0 — Foundation
+
+| Requirement (spec §) | Repository change | Acceptance test |
+| --- | --- | --- |
+| pnpm monorepo, Node 20+, strict TS ESM (§9) | `pnpm-workspace.yaml`, `package.json` (engines, packageManager), `tsconfig.base.json` (strict, NodeNext ESM) | `pnpm install && pnpm build && pnpm test` from clean checkout |
+| Build via small ESM bundler (§9) | `tsup` per package | `pnpm build` emits ESM + d.ts |
+| Vitest unit/integration (§9) | root `vitest` workspace config; per-package tests | `pnpm test` |
+| Formatting/linting (§9) | Prettier + ESLint flat config (typescript-eslint) | `pnpm format:check && pnpm lint` |
+| Changesets (§9, §27) | `.changeset/config.json`; `release.yml` skeleton | config present; CI job exists |
+| CI skeleton (§27, checklist WP0) | `.github/workflows/ci.yml` (Linux; matrix expansion placeholder comment, no skipped tests) | CI green on Linux |
+| Spec-package preflight gate (checklist WP0) | CI step `node docs/raia-devkit-spec/preflight.mjs` | preflight passes in CI |
+| Package boundaries (§10) | Only `packages/contracts` and `packages/core` are created in WP0/WP1 (no placeholder shells). Boundary rules: `core` imports only `contracts` public API; no `@raia/*/src/*` deep imports; `core` has no provider/CLI/MCP/network imports | `packages/core/test/boundaries.test.ts` scans import specifiers; ESLint `no-restricted-imports` |
+
+## WP1 — Contracts and core
+
+Packages: `@raia/contracts` (schemas + generated types + provider contract types),
+`@raia/core` (deterministic engine). No CLI, no providers, no MCP in WP1.
+
+| Requirement (spec §) | Module / file | Acceptance test |
+| --- | --- | --- |
+| Schemas normative, metaschema-valid (§12, checklist) | `packages/contracts/schemas/*.json` — byte-identical copies of `docs/raia-devkit-spec/contracts/*.schema.json`; sync-check script | `schemas.test.ts`: Ajv 2020-12 metaschema validation; `contracts:check` byte-compare against spec package |
+| Generated types, drift-checked (§9, checklist) | `packages/contracts/src/generated/*.ts` via `json-schema-to-typescript`; `pnpm generate`; CI `generate:check` | drift check fails CI when schema and generated types diverge |
+| Provider boundary types (§16) | `packages/contracts/src/provider-contract.ts` — byte-synced copy of normative contract | sync-check + type-only compile |
+| Manifest IO (§15 `manifest`) | `core/src/manifest/` — YAML parse, schema validate, artifact resolution, normalization | helpdesk example loads with every referenced file |
+| Safe path resolution (§25, scenario 4) | `core/src/fs/safe-paths.ts` — root-bounded lexical check, then realpath containment; rejects absolute, `..`, and symlink escape **before reading the target** | negative tests: `../../secret.txt`, symlink out of root |
+| Canonicalization + hashing (§13) | `core/src/hash/` — canonical JSON (sorted keys, array order kept, LF, UTF-8, compact), `sha256:<hex>`; manifest hash embeds each local file's POSIX path + content hash; candidate hash = manifest + lock + required suite (incl. fixtures) + release-policy hashes + core version | determinism test (same input → byte-identical), key-order independence, prompt/fixture/policy/lock edits each change candidate hash |
+| Lock (§12.2, §15 `lock`) | `core/src/lock/` — parse/validate, deterministic lock hash excluding `generatedAt`, manifest-drift detection | lock fixture round-trip; `generatedAt` excluded from hash; manifest change → drift finding |
+| Semantic diff (§15 `diff`, framework §4) | `core/src/diff/` — typed `SemanticChange[]` per provider contract; name-keyed matching for skills/functions/knowledge/integrations; deterministic ordering; risk aggregation | stable diff for `prompts/system.md` change (category `instructions`); high-risk tests: removed escalation/guardrails/knowledge, broadened function input schema, model identity change, new integration |
+| Validation engine (§15 `validation`) | `core/src/validation/` — schema, duplicate names, reference resolution, file boundary, secret scan, suite/policy reference checks, lock checks | positive: helpdesk example passes; negative: duplicates, missing file, traversal, symlink, raw secret |
+| Secret detection + redaction (§15 `redaction`, §25) | `core/src/redaction/` — pattern rules (AWS, GitHub, OpenAI-style, PEM, JWT, generic assignment), allowlisted placeholders and `env://`/`vault://`/`raia-secret://` refs; structured redaction for errors/logs/reports; key-based redaction (`authorization`, `token`, `secret`, `password`, `cookie`, `api-key`) | secret fixture fails validation with `3`-style finding; the raw value never appears in findings, thrown errors, or snapshots |
+| Stable error model (§15 `errors`, §26) | `core/src/errors.ts` — `DevkitError` with stable codes, safe rendering | error snapshot tests contain no secret material |
+
+Deferred to their own work packages (interfaces only, no placeholder branches):
+`policy` and `lifecycle` (WP4), `reports` (WP3), providers (WP2/WP6), CLI (WP2),
+MCP/plugin (WP5). `core` exposes pure functions with injected dependencies so these
+can attach without rework.
+
+## Test-first order of work
+
+1. WP0 scaffold; boundary + toolchain smoke tests.
+2. `@raia/contracts`: schema copies + sync test + metaschema test; type generation + drift check.
+3. `core/hash`: canonical JSON + hashing (determinism tests first).
+4. `core/fs`: safe path resolution (negative tests first).
+5. `core/redaction`: patterns + redaction (negative tests first).
+6. `core/manifest`: loader + normalization (example-based tests).
+7. `core/lock`: parse/hash/drift.
+8. `core/validation`: aggregate engine over 3–7.
+9. `core/diff`: semantic diff + risk rules.
+10. Candidate hashing across manifest/lock/suites/policy; end-to-end example test.
+
+## Definition of done for this plan
+
+All WP0/WP1 boxes in `docs/raia-devkit-spec/ACCEPTANCE_CHECKLIST.md` check with
+commands and results recorded in `IMPLEMENTATION_STATUS.md`; every negative security
+case in the start prompt has an explicit automated test; no later-WP code exists.
