@@ -69,13 +69,7 @@
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "projectRoot",
-          "agentId",
-          "baseVersionId",
-          "expectedLocalCandidateSha256",
-          "confirmed"
-        ],
+        "required": ["projectRoot", "agentId", "baseVersionId", "expectedLocalCandidateSha256", "confirmed"],
         "properties": {
           "projectRoot": { "type": "string", "minLength": 1 },
           "agentId": { "type": "string", "minLength": 1 },
@@ -357,18 +351,10 @@
         "properties": {
           "projectRoot": { "type": "string", "minLength": 1 },
           "traceId": { "type": "string", "minLength": 1 },
-          "destinationPath": {
-            "type": "string",
-            "pattern": "^evals/[A-Za-z0-9._/-]+\\.eval\\.ya?ml$"
-          },
+          "destinationPath": { "type": "string", "pattern": "^evals/[A-Za-z0-9._/-]+\\.eval\\.ya?ml$" },
           "candidateId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,99}$" },
           "redactionMode": { "type": "string", "enum": ["strict"], "default": "strict" },
-          "maxTraceBytes": {
-            "type": "integer",
-            "minimum": 1024,
-            "maximum": 1048576,
-            "default": 102400
-          },
+          "maxTraceBytes": { "type": "integer", "minimum": 1024, "maximum": 1048576, "default": 102400 },
           "confirmed": { "const": true }
         }
       }
