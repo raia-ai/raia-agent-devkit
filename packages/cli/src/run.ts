@@ -11,6 +11,8 @@ import { runInit } from "./commands/init.js";
 import { runValidate } from "./commands/validate.js";
 import { runDiff } from "./commands/diff.js";
 import { runStatus } from "./commands/status.js";
+import { runTest } from "./commands/test.js";
+import { runReview } from "./commands/review.js";
 
 export const CLI_VERSION = "0.1.0";
 
@@ -100,6 +102,31 @@ export async function run(argv: string[], io: CliIO): Promise<number> {
     .description("Show binding, candidate hash, drift, evidence, release, and deployment.")
     .action(async () => {
       exitCode = await runStatus(io, flags());
+    });
+
+  program
+    .command("test")
+    .description("Execute evaluation suites (fixture mode by default) and write evidence reports.")
+    .option("--mode <mode>", "fixture | live (live requires explicit selection)", "fixture")
+    .option("--suite <path...>", "suite file(s) to run (default: manifest suites)")
+    .option("--baseline <path>", "prior evaluation.json to compare against")
+    .option("--seed <n>", "deterministic seed", (v: string) => Number.parseInt(v, 10))
+    .option("--repetitions <n>", "repetitions per case", (v: string) => Number.parseInt(v, 10))
+    .action(async (options: Record<string, unknown>) => {
+      exitCode = await runTest(io, flags(), {
+        mode: String(options["mode"]),
+        suite: options["suite"] as string[] | undefined,
+        baseline: options["baseline"] as string | undefined,
+        seed: options["seed"] as number | undefined,
+        repetitions: options["repetitions"] as number | undefined,
+      });
+    });
+
+  program
+    .command("review")
+    .description("Aggregate diff, validation, evaluation, risk, and release-policy evidence.")
+    .action(async () => {
+      exitCode = await runReview(io, flags());
     });
 
   try {

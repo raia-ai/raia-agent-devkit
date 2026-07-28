@@ -42,6 +42,12 @@ export {
   type SemanticDiffResult,
 } from "./diff/semantic-diff.js";
 export {
+  evaluateReleasePolicy,
+  type PolicyEvaluationInput,
+  type PolicyEvaluationResult,
+  type PolicyRequirementResult,
+} from "./policy/policy.js";
+export {
   LOCK_FILE_NAME,
   validateProject,
   VALIDATION_RULE_SET_VERSION,

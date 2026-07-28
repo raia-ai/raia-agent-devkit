@@ -1,12 +1,9 @@
 {
-  "name": "@raia/cli",
+  "name": "@raia/eval-engine",
   "version": "0.1.0",
-  "description": "raia Agent DevKit CLI: manage a raia agent as versioned software.",
+  "description": "Deterministic fixture-mode evaluation engine for the raia Agent DevKit.",
   "type": "module",
   "license": "UNLICENSED",
-  "bin": {
-    "raia": "./dist/bin.js"
-  },
   "exports": {
     ".": {
       "types": "./src/index.ts",
@@ -31,9 +28,7 @@
   "dependencies": {
     "@raia/contracts": "workspace:*",
     "@raia/core": "workspace:*",
-    "@raia/eval-engine": "workspace:*",
-    "@raia/provider-mock": "workspace:*",
-    "commander": "^12.1.0",
-    "yaml": "^2.8.0"
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1"
   }
 }

@@ -75,10 +75,38 @@ WP2 decisions recorded in `docs/adr/0002-wp2-provider-and-cli-choices.md`.
 - `--region`/`--api-base-url`/`--profile` are parsed and recorded in the binding but
   only meaningful for the HTTP provider (WP6).
 
-## Next smallest vertical slice (WP3 — proposed, not started)
+## WP3 — Evaluation vertical slice
 
-Fixture-mode evaluation engine: deterministic evaluators (`exact`, `contains`,
-`regex`, `json-schema`, `tool-call`, `tool-not-called`, `latency`, `cost`,
-`conversation-state`; `rubric` disabled without an evaluator provider), JSON/JUnit/
-Markdown reports, baseline regression comparison, `raia test --mode fixture` and
-`raia review`, with a blocking failure exiting `6`.
+| Gate                                                                | Status      | Evidence                                                                                                                                                                                                                                                       |
+| ------------------------------------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fixture-mode smoke and regression suites execute deterministically  | ✅ complete | `packages/eval-engine/test/engine.test.ts`: pristine helpdesk suites pass 5/5; two runs produce identical results and identical JSON reports                                                                                                                   |
+| All deterministic evaluator types implemented and tested            | ✅ complete | `exact`, `contains`, `regex` (length/quantifier/backreference limits), `json-schema` (separate Ajv, size caps), `tool-call`, `tool-not-called`, `latency`, `cost`, `conversation-state`, plus implicit critical `tool-policy` and `expected-states` assertions |
+| Rubric disabled without an explicit evaluator provider              | ✅ complete | Rubric assertion → `skipped` with reason when no provider; injected fake provider scores and passes — proving pluggability                                                                                                                                     |
+| JSON, JUnit XML, and Markdown reports emitted                       | ✅ complete | `raia test` writes `reports/latest/evaluation.{json,junit.xml,md}`; JUnit carries per-assertion `<failure>` with `type="critical"`; CLI test verifies byte-stability across runs apart from `startedAt`/`completedAt`                                          |
+| Baseline comparison labels regressions/improvements/unchanged/flaky | ✅ complete | `compareRuns` + `raia test --baseline`; regression fixture labeled in `comparison.regressions`; reversed comparison labels the improvement; flaky via repetition-variant executor test                                                                         |
+| Critical deterministic failure exits `6` regardless of pass rate    | ✅ complete | Spec scenario 6: corrupt `password-refusal.json` → gate fails with pass rate still 80% → `raia test` exits `6`                                                                                                                                                 |
+| Live mode requires explicit selection, never default                | ✅ complete | Default mode is fixture; `--mode live` refused with typed `UNAVAILABLE` naming remote-conversation/model-cost implications (runtime arrives in WP6)                                                                                                            |
+| `raia review` aggregates diff/validation/evaluation/risk/policy     | ✅ complete | Clean project + current evidence → READY, exit 0; missing evidence, stale candidate binding, and drift each produce named blockers and exit 3; review evidence hash stable across identical states                                                             |
+
+Core gained the pure `policy` module (`evaluateReleasePolicy`, 8 tests) reused by
+review and, in WP4, by release. Full suite after WP3: **141 tests across 16 files**;
+typecheck 5/5 packages; lint 0; format clean; build 10/10 bundles. Built-binary golden
+path now extends to `init → validate → test (5/5 PASS) → review (READY, risk low)`.
+Decisions in `docs/adr/0003-wp3-evaluation-choices.md`.
+
+## WP3 known limitations
+
+- Live evaluation and hosted evaluation runs remain provider-gated (WP6); the mock's
+  `createEvaluationRun` still fails closed with `UNAVAILABLE` — local fixture
+  execution is authoritative per the build spec.
+- Approval requirements above zero fail closed until approval records exist (WP4).
+- Simulator-based conversations are recorded as skipped in fixture mode.
+
+## Next smallest vertical slice (WP4 — proposed, not started)
+
+Lifecycle engine and release/staging: pure transition decisions with atomic
+`.raia/workflow-state.json` persistence and evidence invalidation; mock-provider
+drafts, immutable release candidates, idempotency replay/mismatch, stale-base/ETag
+conflicts; staging deployment `QUEUED → DEPLOYING → HEALTHY` with rollback targets;
+`raia release create` and `raia deploy staging` with `--yes` previews and exits `5`
+on conflicts.

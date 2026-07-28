@@ -47,6 +47,9 @@ importers:
       '@raia/core':
         specifier: workspace:*
         version: link:../core
+      '@raia/eval-engine':
+        specifier: workspace:*
+        version: link:../eval-engine
       '@raia/provider-mock':
         specifier: workspace:*
         version: link:../provider-mock
@@ -80,6 +83,21 @@ importers:
       yaml:
         specifier: ^2.8.0
         version: 2.9.0
+
+  packages/eval-engine:
+    dependencies:
+      '@raia/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@raia/core':
+        specifier: workspace:*
+        version: link:../core
+      ajv:
+        specifier: ^8.17.1
+        version: 8.20.0
+      ajv-formats:
+        specifier: ^3.0.1
+        version: 3.0.1(ajv@8.20.0)
 
   packages/provider-mock:
     dependencies:
