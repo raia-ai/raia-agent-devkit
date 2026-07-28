@@ -1,0 +1,38 @@
+{
+  "name": "@raia/cli",
+  "version": "0.1.0",
+  "description": "raia Agent DevKit CLI: manage a raia agent as versioned software.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "bin": {
+    "raia": "./dist/bin.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@raia/contracts": "workspace:*",
+    "@raia/core": "workspace:*",
+    "@raia/provider-mock": "workspace:*",
+    "commander": "^12.1.0",
+    "yaml": "^2.8.0"
+  }
+}

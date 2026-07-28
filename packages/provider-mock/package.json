@@ -1,0 +1,32 @@
+{
+  "name": "@raia/provider-mock",
+  "version": "0.1.0",
+  "description": "Deterministic filesystem-backed mock management provider for the raia Agent DevKit.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@raia/contracts": "workspace:*",
+    "@raia/core": "workspace:*"
+  }
+}

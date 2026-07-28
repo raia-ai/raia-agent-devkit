@@ -51,9 +51,34 @@ secret ruleset, diff severity ladder, DI for node built-ins). One accommodation:
 - Coverage floors (90% core) are formally asserted in WP7 when the matrix lands; current
   suite is 88 tests across 10 files covering every WP1 gate including negatives.
 
-## Next smallest vertical slice (WP2 — proposed, not started)
+## WP2 — Mock provider and CLI spine
 
-Mock management provider (filesystem, injected clock/IDs, ETags, idempotency) plus the
-CLI spine: `doctor`, `init`, `validate`, `diff`, `status` with `--json` and exact exit
-codes; golden path `init → validate → diff` against the helpdesk fixture with no
-network or credentials.
+| Gate                                                                                | Status      | Evidence                                                                                                                                                                                                                                                                                                                                                                            |
+| ----------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Filesystem provider: discovery, export, versioning, ETags, pagination, typed errors | ✅ complete | `packages/provider-mock/test/mock-provider.test.ts` (9 tests): seed from fixture, complete 10-artifact bundle export, deterministic re-export, `NOT_FOUND`/`VALIDATION_FAILED`/`UNAVAILABLE` typed errors, version advance with new ETag and exportable history, opaque-cursor pagination, scope fixtures, outage simulation                                                        |
+| `doctor`, `init`, `validate`, `diff`, `status` in human and JSON modes              | ✅ complete | `packages/cli/test/cli.test.ts` (14 tests) exercises every command in both modes; JSON mode emits exactly one parseable object per command and is deterministic for an unchanged project                                                                                                                                                                                            |
+| CLI exit codes exactly match the specification                                      | ✅ complete | Contract tests: `0` success/help/version; `1` operational (`NOT_FOUND` provider state); `2` unknown provider/fixture/`--against`/command/flag, unbound project, preview-without-`--yes`, overwrite refusal; `3` validation failure (secret in prompt, token absent from output)                                                                                                     |
+| Local writes atomic; no silent overwrites                                           | ✅ complete | `applyWrites` (temp + rename); modified `prompts/system.md` blocks re-init with exit `2` and file preserved; `--force` overwrites; unchanged re-init reports zero writes                                                                                                                                                                                                            |
+| Golden path works with no credentials or network                                    | ✅ complete | In-process test `init → validate → diff → status` plus the built binary run: `node dist/bin.js init --provider mock --fixture …helpdesk-agent --yes` → 14 files; `validate` PASS with candidate hash; prompt edit → `diff` shows 1 `instructions`/medium change; `status` reports local drift YES / remote no. Manifest hash `sha256:b88c1f9b…` matches the WP1 golden test exactly |
+
+Full-suite evidence after WP2: `pnpm test` → **112/112 across 13 files**; `pnpm typecheck`
+→ 4/4 packages Done; `pnpm lint` → 0 problems; `pnpm format:check` → pass; `pnpm build`
+→ 8/8 bundles; `pnpm contracts:check`, `pnpm generate:check`, `pnpm preflight` → pass.
+WP2 decisions recorded in `docs/adr/0002-wp2-provider-and-cli-choices.md`.
+
+## WP2 known limitations
+
+- Mock lifecycle mutations (drafts, evaluations, releases, deployments, traces) fail
+  closed with typed `UNAVAILABLE` until WP3/WP4 implement them.
+- `raia pull`, `auth`, `plan`, `test`, `review`, `release`, `deploy`, `trace`, and
+  `learn` are not yet implemented (WP3+ per the build spec).
+- `--region`/`--api-base-url`/`--profile` are parsed and recorded in the binding but
+  only meaningful for the HTTP provider (WP6).
+
+## Next smallest vertical slice (WP3 — proposed, not started)
+
+Fixture-mode evaluation engine: deterministic evaluators (`exact`, `contains`,
+`regex`, `json-schema`, `tool-call`, `tool-not-called`, `latency`, `cost`,
+`conversation-state`; `rubric` disabled without an evaluator provider), JSON/JUnit/
+Markdown reports, baseline regression comparison, `raia test --mode fixture` and
+`raia review`, with a blocking failure exiting `6`.
