@@ -39,17 +39,32 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@20.19.43)(yaml@2.9.0)
 
+  apps/mock-management-api:
+    dependencies:
+      '@raia/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@raia/provider-mock':
+        specifier: workspace:*
+        version: link:../../packages/provider-mock
+
   packages/cli:
     dependencies:
       '@raia/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@raia/conversation-client':
+        specifier: workspace:*
+        version: link:../conversation-client
       '@raia/core':
         specifier: workspace:*
         version: link:../core
       '@raia/eval-engine':
         specifier: workspace:*
         version: link:../eval-engine
+      '@raia/provider-http':
+        specifier: workspace:*
+        version: link:../provider-http
       '@raia/provider-mock':
         specifier: workspace:*
         version: link:../provider-mock
@@ -68,6 +83,22 @@ importers:
       ajv-formats:
         specifier: ^3.0.1
         version: 3.0.1(ajv@8.20.0)
+
+  packages/conversation-client:
+    dependencies:
+      '@raia/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@raia/eval-engine':
+        specifier: workspace:*
+        version: link:../eval-engine
+      '@raia/provider-http':
+        specifier: workspace:*
+        version: link:../provider-http
+    devDependencies:
+      '@raia/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/core:
     dependencies:
@@ -128,6 +159,22 @@ importers:
       yaml:
         specifier: ^2.8.0
         version: 2.9.0
+
+  packages/provider-http:
+    dependencies:
+      '@raia/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+    devDependencies:
+      '@raia/core':
+        specifier: workspace:*
+        version: link:../core
+      '@raia/mock-management-api':
+        specifier: workspace:*
+        version: link:../../apps/mock-management-api
+      '@raia/provider-mock':
+        specifier: workspace:*
+        version: link:../provider-mock
 
   packages/provider-mock:
     dependencies:

@@ -1,0 +1,22 @@
+{
+  "name": "@raia/mock-management-api",
+  "version": "0.1.0",
+  "description": "Local HTTP server conforming to the proposed raia management OpenAPI contract, backed by the deterministic mock provider.",
+  "type": "module",
+  "private": true,
+  "license": "UNLICENSED",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@raia/contracts": "workspace:*",
+    "@raia/provider-mock": "workspace:*"
+  }
+}

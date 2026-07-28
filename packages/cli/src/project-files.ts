@@ -13,7 +13,8 @@ export const VALIDATION_REPORT_PATH = "reports/latest/validation.json";
 
 export interface ProjectBinding {
   schemaVersion: 1;
-  provider: "mock";
+  /** "http" targets the proposed management contract and is opt-in via explicit binding edit. */
+  provider: "mock" | "http";
   region: string;
   apiBaseUrl: string;
   workspaceId: string;

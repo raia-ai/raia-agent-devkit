@@ -75,8 +75,9 @@ export interface GateResult {
 export interface EvaluationRunResult {
   engineVersion: string;
   runId: string;
-  mode: "fixture";
-  provider: "fixture";
+  mode: "fixture" | "live";
+  /** "fixture", or the live runtime profile (e.g. "external-openapi-v1"). */
+  provider: string;
   candidateSha256: Sha256 | null;
   seed: number;
   repetitions: number;

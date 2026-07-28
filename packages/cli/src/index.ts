@@ -11,7 +11,12 @@ export {
   type PlannedWrite,
   type ProjectBinding,
 } from "./project-files.js";
-export { createProvider, operationContext, providerForBinding } from "./provider.js";
+export {
+  createHttpProvider,
+  createProvider,
+  operationContext,
+  providerForBinding,
+} from "./provider.js";
 export { aggregateReadiness, type ReadinessAggregate } from "./readiness.js";
 export { writeProjectFromExport, plannedWriteCount } from "./project-writer.js";
 export { snapshotFromExport, snapshotFromLocal } from "./snapshots.js";

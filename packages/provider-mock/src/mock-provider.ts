@@ -375,7 +375,8 @@ export class MockManagementProvider implements ManagementProvider {
   ): Promise<EvaluationRun> {
     this.#checkAvailable(context);
     throw new ProviderError(
-      "createEvaluationRun is implemented in a later work package (WP3).",
+      "Remote evaluation runs are not part of the local-first MVP surface: evaluations execute " +
+        "in the local eval-engine (fixture mode, or live mode via the pinned conversation runtime).",
       "UNAVAILABLE",
       context.requestId,
     );
@@ -384,7 +385,8 @@ export class MockManagementProvider implements ManagementProvider {
   async getEvaluationRun(context: OperationContext, _runId: string): Promise<EvaluationRun> {
     this.#checkAvailable(context);
     throw new ProviderError(
-      "getEvaluationRun is implemented in a later work package (WP3).",
+      "Remote evaluation runs are not part of the local-first MVP surface; evaluation evidence " +
+        "lives in the local reports written by `raia test`.",
       "UNAVAILABLE",
       context.requestId,
     );

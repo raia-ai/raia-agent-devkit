@@ -5,6 +5,7 @@ plugins/claude-code/hooks/hooks.json
 packages/contracts/schemas/
 packages/mcp-server/src/mcp-tool-catalog.json
 packages/contracts/src/generated/
+packages/conversation-client/src/generated/
 packages/contracts/src/provider-contract.ts
 pnpm-lock.yaml
 dist/

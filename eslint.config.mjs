@@ -9,6 +9,7 @@ export default tseslint.config(
       "docs/raia-devkit-spec/**",
       "packages/contracts/src/generated/**",
       "packages/contracts/src/provider-contract.ts",
+      "packages/conversation-client/src/generated/**",
     ],
   },
   js.configs.recommended,

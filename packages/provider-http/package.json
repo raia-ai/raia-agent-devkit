@@ -1,12 +1,9 @@
 {
-  "name": "@raia/cli",
+  "name": "@raia/provider-http",
   "version": "0.1.0",
-  "description": "raia Agent DevKit CLI: manage a raia agent as versioned software.",
+  "description": "HTTP ManagementProvider for the proposed raia agent-devkit management contract, with typed errors and bounded retries.",
   "type": "module",
   "license": "UNLICENSED",
-  "bin": {
-    "raia": "./dist/bin.js"
-  },
   "exports": {
     ".": {
       "types": "./src/index.ts",
@@ -29,13 +26,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@raia/contracts": "workspace:*",
-    "@raia/conversation-client": "workspace:*",
+    "@raia/contracts": "workspace:*"
+  },
+  "devDependencies": {
     "@raia/core": "workspace:*",
-    "@raia/eval-engine": "workspace:*",
-    "@raia/provider-http": "workspace:*",
-    "@raia/provider-mock": "workspace:*",
-    "commander": "^12.1.0",
-    "yaml": "^2.8.0"
+    "@raia/mock-management-api": "workspace:*",
+    "@raia/provider-mock": "workspace:*"
   }
 }

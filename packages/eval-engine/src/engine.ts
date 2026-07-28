@@ -28,9 +28,13 @@ export interface RunOptions {
   now?: () => string;
   /**
    * Test seam: executes one case repetition. Defaults to the deterministic
-   * fixture executor; live mode (WP6) plugs in here behind explicit selection.
+   * fixture executor; live mode plugs in here behind explicit selection.
    */
   caseExecutor?: CaseExecutor;
+  /** Recorded run mode; "live" is only meaningful with a caseExecutor. */
+  mode?: "fixture" | "live";
+  /** Recorded executor identity, e.g. the live runtime profile name. */
+  providerLabel?: string;
 }
 
 export type CaseExecutor = (
@@ -245,8 +249,8 @@ export async function runEvaluation(options: RunOptions): Promise<EvaluationRunR
   const withoutEvidence = {
     engineVersion: ENGINE_VERSION,
     runId,
-    mode: "fixture" as const,
-    provider: "fixture" as const,
+    mode: options.mode ?? ("fixture" as const),
+    provider: options.providerLabel ?? "fixture",
     candidateSha256: options.candidateSha256 ?? null,
     seed,
     repetitions,

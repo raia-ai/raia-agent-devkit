@@ -4,7 +4,9 @@
  */
 import path from "node:path";
 import { existsSync } from "node:fs";
+import { describeRuntime, type RuntimeDescription } from "@raia/conversation-client";
 import { loadManifest, MANIFEST_FILE_NAME, parseLock } from "@raia/core";
+import { managementCredentialFromEnv } from "@raia/provider-http";
 import { EXIT } from "../exit-codes.js";
 import { emitResult, type CliIO, type GlobalFlags } from "../io.js";
 import { readBinding, readTextIfExists, MOCK_STATE_DIR } from "../project-files.js";
@@ -83,10 +85,12 @@ export async function runDoctor(io: CliIO, flags: GlobalFlags): Promise<number> 
     }
     add(
       "credentials",
-      true,
+      binding.provider === "mock" || managementCredentialFromEnv(process.env) !== undefined,
       binding.provider === "mock"
         ? "mock provider requires no credentials"
-        : "credential check not implemented",
+        : managementCredentialFromEnv(process.env) !== undefined
+          ? "management credential present (RAIA_ACCESS_TOKEN; value not shown)"
+          : "http provider needs RAIA_ACCESS_TOKEN (workspace-scoped service token)",
     );
   } else {
     add(
@@ -98,8 +102,32 @@ export async function runDoctor(io: CliIO, flags: GlobalFlags): Promise<number> 
     );
   }
 
+  // Conversation runtime report (build spec section 16): selected profile,
+  // contract checksum, server, and auth scheme — never credential material.
+  // Fixture mode needs no runtime, so an unavailable runtime is informational
+  // unless the profile itself is misconfigured.
+  const runtime: RuntimeDescription = describeRuntime({
+    env: process.env,
+    region: flags.region === "eu" ? "eu" : "us",
+  });
+  const runtimeSummary =
+    `profile ${runtime.profile}` +
+    (runtime.contractSha256 !== undefined
+      ? `, contract sha256:${runtime.contractSha256.slice(0, 12)}…`
+      : "") +
+    (runtime.server !== undefined ? `, server ${runtime.server}` : "") +
+    (runtime.authScheme !== undefined ? `, auth ${runtime.authScheme}` : "") +
+    (runtime.available
+      ? ", live evaluation available"
+      : ` — live evaluation unavailable: ${runtime.unavailableReason ?? "not configured"}`);
+  add(
+    "conversation-runtime",
+    runtime.available || runtime.unavailableReason?.startsWith("Unknown runtime profile") !== true,
+    runtimeSummary,
+  );
+
   const ok = checks.every((check) => check.ok);
-  emitResult(io, flags, { ok, checks }, [
+  emitResult(io, flags, { ok, checks, runtime }, [
     `doctor: ${ok ? "all checks passed" : "problems found"}`,
     ...checks.map((check) => `  [${check.ok ? "ok" : "FAIL"}] ${check.id}: ${check.message}`),
   ]);

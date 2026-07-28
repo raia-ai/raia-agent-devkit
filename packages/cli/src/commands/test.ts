@@ -1,11 +1,18 @@
 /**
- * `raia test` (build spec sections 20 and 21): execute fixture-mode suites and
- * write JSON/JUnit/Markdown evidence. Fixture mode is the default; live mode
- * must be selected explicitly and is refused until a conversation runtime
- * exists (WP6) — with a clear cost/network notice either way.
+ * `raia test` (build spec sections 20 and 21): execute evaluation suites and
+ * write JSON/JUnit/Markdown evidence. Fixture mode is the deterministic
+ * default. Live mode requires explicit `--mode live`, prints a cost/network
+ * notice, and runs only when the configured runtime profile has a pinned
+ * valid contract and an Agent Secret Key — otherwise it fails closed.
  */
 import path from "node:path";
 import { ProviderError } from "@raia/contracts";
+import {
+  createConversationRuntime,
+  createLiveCaseExecutor,
+  describeRuntime,
+  CapabilityUnavailableError,
+} from "@raia/conversation-client";
 import { loadEvaluationSuite, validateProject, type LoadedSuite } from "@raia/core";
 import {
   compareRuns,
@@ -14,6 +21,7 @@ import {
   renderMarkdownReport,
   runEvaluation,
   type BaselineComparison,
+  type CaseExecutor,
   type EvaluationRunResult,
 } from "@raia/eval-engine";
 import { EXIT, UsageError } from "../exit-codes.js";
@@ -37,15 +45,40 @@ export async function runTest(
 ): Promise<number> {
   const projectRoot = io.cwd;
 
+  let liveExecutor: CaseExecutor | undefined;
+  let liveProfile: string | undefined;
   if (options.mode === "live") {
-    throw new ProviderError(
-      "Live evaluation may create remote conversations and incur model usage costs. " +
-        "It requires a configured conversation runtime, which arrives in a later work package (WP6). " +
-        "Fixture mode remains the deterministic default: re-run without --mode live.",
-      "UNAVAILABLE",
+    // Explicit selection + clear cost/network notice (spec item 18).
+    io.stderr(
+      "live mode: this sends real conversations to the configured raia runtime and may incur model usage costs.",
     );
-  }
-  if (options.mode !== "fixture") {
+    const env = process.env;
+    const region = flags.region === "eu" ? ("eu" as const) : ("us" as const);
+    const description = describeRuntime({ env, region });
+    if (!description.available) {
+      const reason = description.unavailableReason ?? "the conversation runtime is not configured.";
+      throw new ProviderError(
+        `Live evaluation is unavailable: ${reason} Fixture mode remains the deterministic default.`,
+        description.credentialPresent ? "UNAVAILABLE" : "AUTHENTICATION_REQUIRED",
+      );
+    }
+    try {
+      const runtime = createConversationRuntime({
+        env,
+        region,
+        ...(env["RAIA_CONVERSATION_USER_ID"] !== undefined
+          ? { conversationUserId: env["RAIA_CONVERSATION_USER_ID"] }
+          : {}),
+      });
+      liveExecutor = createLiveCaseExecutor({ provider: runtime });
+      liveProfile = description.profile;
+    } catch (error) {
+      if (error instanceof CapabilityUnavailableError) {
+        throw new ProviderError(error.message, "UNAVAILABLE");
+      }
+      throw error;
+    }
+  } else if (options.mode !== "fixture") {
     throw new UsageError(`Unknown --mode "${options.mode}" (fixture | live).`);
   }
 
@@ -74,6 +107,9 @@ export async function runTest(
       : {}),
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.repetitions !== undefined ? { repetitions: options.repetitions } : {}),
+    ...(liveExecutor !== undefined && liveProfile !== undefined
+      ? { caseExecutor: liveExecutor, mode: "live" as const, providerLabel: liveProfile }
+      : {}),
   });
 
   let comparison: BaselineComparison | undefined;

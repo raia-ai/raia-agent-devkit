@@ -72,15 +72,25 @@ describe("raia test (fixture mode)", () => {
     expect(runResult.gate.passed).toBe(false);
   });
 
-  it("defaults to fixture mode and refuses live mode with a cost notice", async () => {
+  it("defaults to fixture mode; unconfigured live mode fails closed with a cost notice", async () => {
     const fixtureRun = await cli(["--json", "test"]);
     expect((jsonOf(fixtureRun)["run"] as { mode: string }).mode).toBe("fixture");
 
-    const live = await cli(["--json", "test", "--mode", "live"]);
-    expect(live.code).toBe(1);
-    const error = jsonOf(live)["error"] as Record<string, unknown>;
-    expect(error["code"]).toBe("UNAVAILABLE");
-    expect(String(error["message"])).toMatch(/cost/i);
+    const saved = process.env["RAIA_AGENT_SECRET_KEY"];
+    delete process.env["RAIA_AGENT_SECRET_KEY"];
+    try {
+      const live = await cli(["--json", "test", "--mode", "live"]);
+      // No Agent Secret Key configured → typed auth failure (exit 4), and the
+      // explicit cost/network notice still reaches stderr first.
+      expect(live.code).toBe(4);
+      const error = jsonOf(live)["error"] as Record<string, unknown>;
+      expect(error["code"]).toBe("AUTHENTICATION_REQUIRED");
+      expect(live.stderr.join("\n")).toMatch(/cost/i);
+    } finally {
+      if (saved !== undefined) {
+        process.env["RAIA_AGENT_SECRET_KEY"] = saved;
+      }
+    }
   });
 
   it("reports are byte-stable across runs apart from timestamps", async () => {

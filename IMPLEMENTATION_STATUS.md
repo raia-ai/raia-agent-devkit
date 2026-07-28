@@ -160,12 +160,46 @@ and the recorded template conflict in `docs/adr/0005-wp5-mcp-and-plugin-choices.
   the spec's intent.
 - Remote evaluation runs remain provider-gated (`UNAVAILABLE`) pending WP6.
 
-## Next smallest vertical slice (WP6 — proposed, not started)
+## WP6 — HTTP and conversation providers
 
-HTTP providers behind the existing boundaries: the `/agent-devkit/v1`
-management client generated against `contracts/raia-management.openapi.yaml`
-with contract tests against a local conforming mock server (idempotency
-headers, If-Match, Retry-After, bounded backoff, request-id propagation,
-redacted logging), and the pinned `external-openapi-v1` conversation client
-from `contracts/vendor/` with `developer-v1` failing closed
-(`CAPABILITY_UNAVAILABLE`).
+| Gate                                                             | Status      | Evidence                                                                                                                                                                                                                                                             |
+| ---------------------------------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Contract tests pass against mock HTTP servers                    | ✅ complete | `apps/mock-management-api` serves the exact `/agent-devkit/v1` wire contract over real sockets; `packages/provider-http/test/contract.test.ts` round-trips every operation: export+ETag, draft (If-Match, replay, mismatch, stale), release→staging→HEALTHY→rollback |
+| Retries honor Retry-After, bounded/jittered, never unsafe codes  | ✅ complete | `retry-and-credentials.test.ts`: Retry-After 2 s honored exactly; 503 backoff `[188, 375]` ms with injected jitter then typed surface; parameterized never-retry table (401/403/409×3/422 → exactly 1 attempt); elapsed-time cap stops at attempt 2                  |
+| Agent secret cannot construct management provider                | ✅ complete | Type-level (`@ts-expect-error` in tests) plus runtime guard: `kind: "agent-secret-key"` → typed `AUTHENTICATION_REQUIRED`; env reader never reads `RAIA_AGENT_SECRET_KEY`; CLI factory test repeats the refusal; token material proven absent from log entries       |
+| Runtime-profile drift fails closed                               | ✅ complete | Generator verifies recorded checksums (`fabbd26b…` raw, `a76a1b2a…` projected) against actual bytes before emitting; `check-contract-sync.mjs` fails on any divergence (exercised in-test by tampering the generated file); unknown profiles are typed failures      |
+| Pinned `external-openapi-v1` client; `developer-v1` fails closed | ✅ complete | Client dispatches only through generated `operationId → {method, path}` constants (all `/external/...`); auth via `Agent-Secret-Key` header, never a bearer; `developer-v1` and `custom-openapi` → `CapabilityUnavailableError`; loopback-only base-URL overrides    |
+| Live evaluation wired behind explicit selection                  | ✅ complete | `raia test --mode live` (cost notice on stderr) runs real conversations through the runtime against the loopback contract server; run + reports record `mode: "live"`, `provider: "external-openapi-v1"`; exit 4 without credential, exit 1 for disabled profiles    |
+| Doctor reports profile/checksum/server/auth without secrets      | ✅ complete | `raia doctor --json` emits the runtime block (profile, projected sha256, pinned server, auth scheme, credential presence); secret value proven absent; unknown profile flips the check to FAIL                                                                       |
+
+New packages: `@raia/provider-http` (transport, problem+json mapping, bounded
+retry, credential boundary, `HttpManagementProvider`), `@raia/conversation-client`
+(pinned generated constants, `ExternalConversationClient`, profile registry,
+live case executor, loopback mock conversation server), and the
+`apps/mock-management-api` conforming server. Operations the pinned vendor
+contract cannot express fail closed as RECORDED gaps (ADR 0006 §5). Full suite
+after WP6: **248 tests across 26 files**; typecheck 9/9 projects; lint 0; format
+clean; build green including plugin assembly; both contract-sync gates green;
+`claude plugin validate --strict` still passing. Decisions in
+`docs/adr/0006-wp6-http-and-conversation-providers.md`.
+
+## WP6 known limitations
+
+- The proposed management API has no live deployment; the HTTP client is
+  verified only against the conforming local server (which is exactly what the
+  acceptance checklist permits claiming — no live raia integration is claimed).
+- `ConversationProvider.deleteConversation` and channel-scoped creation cannot
+  be expressed by the pinned external contract and fail closed
+  (`CAPABILITY_UNAVAILABLE`) — a recorded platform decision, not an omission.
+- Live mode observes only assistant text (no tool calls or state transitions
+  over the conversation surface); tool-policy/state assertions evaluate against
+  empty observations rather than fabricated ones.
+- OS-credential-manager storage and the OAuth device flow remain WP7+ scope;
+  `RAIA_ACCESS_TOKEN` (CI fallback) and `RAIA_AGENT_SECRET_KEY` are the
+  supported sources today.
+
+## Next smallest vertical slice (WP7 — proposed, not started)
+
+Hardening and packaging: 3-OS CI matrix with coverage floors (90% core / 85%
+providers+eval / 80% overall), packaged CLI/MCP/plugin artifacts with SHA-256
+checksums and provenance, the docs golden path, and zero skipped tests.
