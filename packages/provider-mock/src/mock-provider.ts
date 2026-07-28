@@ -27,9 +27,10 @@ import type {
   TraceSummary,
   Workspace,
 } from "@raia/contracts";
-import { decideDeploymentTransition, hashCanonical } from "@raia/core";
+import { decideDeploymentTransition, hashCanonical, redactValue, scanForSecrets } from "@raia/core";
 import { StateStore, type MockState } from "./state.js";
 import { buildBundleFromFixture } from "./seed.js";
+import { defaultTraceFixtures } from "./traces.js";
 
 export interface MockProviderOptions {
   /** Directory that holds the mock's atomic JSON state. */
@@ -137,6 +138,9 @@ export class MockManagementProvider implements ManagementProvider {
         summary,
         versions: { [versionId]: seed.bundle },
       };
+      for (const trace of defaultTraceFixtures(seed.agentId, versionId)) {
+        state.traces[trace.id] = trace;
+      }
       return { workspaceId: seed.workspaceId, agentId: seed.agentId, versionId, etag };
     });
   }
@@ -590,22 +594,84 @@ export class MockManagementProvider implements ManagementProvider {
 
   async listTraces(
     context: OperationContext,
-    _input: { agentId: string; page?: PageRequest },
+    input: {
+      agentId: string;
+      versionId?: string;
+      outcome?: TraceSummary["outcome"];
+      page?: PageRequest;
+    },
   ): Promise<Page<TraceSummary>> {
     this.#checkAvailable(context);
-    throw new ProviderError(
-      "listTraces is implemented in a later work package (WP4).",
-      "UNAVAILABLE",
-      context.requestId,
-    );
+    this.#requireScope(context, "trace:read");
+    const state = await this.#store.read();
+    if (state.agents[input.agentId] === undefined) {
+      throw new ProviderError(`Unknown agent "${input.agentId}".`, "NOT_FOUND", context.requestId);
+    }
+    const summaries = Object.values(state.traces)
+      .filter(
+        (trace) =>
+          trace.agentId === input.agentId &&
+          (input.versionId === undefined || trace.versionId === input.versionId) &&
+          (input.outcome === undefined || trace.outcome === input.outcome),
+      )
+      .map(({ id, agentId, versionId, startedAt, outcome, tags }) => ({
+        id,
+        agentId,
+        versionId,
+        startedAt,
+        outcome,
+        tags: [...tags],
+      }))
+      .sort((a, b) => a.id.localeCompare(b.id));
+    return paginate(summaries, input.page);
   }
 
-  async getTrace(context: OperationContext, _traceId: string, _maxBytes: number): Promise<Trace> {
+  /**
+   * Server-side trace redaction and size capping (build spec section 17):
+   * secret-like content is redacted before return, events are truncated to the
+   * byte budget, and applied redaction rules are recorded.
+   */
+  async getTrace(context: OperationContext, traceId: string, maxBytes: number): Promise<Trace> {
     this.#checkAvailable(context);
-    throw new ProviderError(
-      "getTrace is implemented in a later work package (WP4).",
-      "UNAVAILABLE",
-      context.requestId,
+    this.#requireScope(context, "trace:read");
+    const state = await this.#store.read();
+    const stored = state.traces[traceId];
+    if (stored === undefined) {
+      throw new ProviderError(`Unknown trace "${traceId}".`, "NOT_FOUND", context.requestId);
+    }
+    const budget = Math.min(Math.max(maxBytes, 1024), 1024 * 1024);
+
+    const rawSerialized = JSON.stringify(stored.events);
+    const redactionRules = [
+      ...new Set(scanForSecrets(rawSerialized, traceId).map((finding) => finding.ruleId)),
+    ].sort();
+
+    const redactedEvents = stored.events.map(
+      (event) => redactValue(event) as Record<string, unknown>,
     );
+    const events: Array<Record<string, unknown>> = [];
+    let used = 2; // brackets
+    let truncated = false;
+    for (const event of redactedEvents) {
+      const size = Buffer.byteLength(JSON.stringify(event), "utf8") + 1;
+      if (used + size > budget) {
+        truncated = true;
+        break;
+      }
+      events.push(event);
+      used += size;
+    }
+
+    return {
+      id: stored.id,
+      agentId: stored.agentId,
+      versionId: stored.versionId,
+      startedAt: stored.startedAt,
+      outcome: stored.outcome,
+      tags: [...stored.tags],
+      events,
+      redactions: redactionRules,
+      truncated,
+    };
   }
 }

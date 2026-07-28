@@ -1,0 +1,42 @@
+{
+  "name": "@raia/mcp-server",
+  "version": "0.1.0",
+  "description": "Local stdio MCP server exposing the allowlisted raia Agent DevKit lifecycle tools.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "bin": {
+    "raia-mcp": "./dist/bin.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@raia/cli": "workspace:*",
+    "@raia/contracts": "workspace:*",
+    "@raia/core": "workspace:*",
+    "@raia/eval-engine": "workspace:*",
+    "@raia/provider-mock": "workspace:*",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "yaml": "^2.8.0"
+  }
+}

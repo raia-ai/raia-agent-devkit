@@ -8,11 +8,9 @@ export default defineConfig({
   target: "node20",
   sourcemap: false,
   splitting: false,
-  // The runnable bin must not resolve workspace packages at runtime (their
-  // development exports point at TypeScript sources). Bundle everything except
-  // commander, which stays a regular dependency of this package.
-  noExternal: [/^@raia\//, "ajv", "ajv-formats", "yaml"],
-  // Bundled CJS dependencies use require(); provide it in the ESM output.
+  // The plugin ships this bundle standalone (no node_modules): bundle every
+  // dependency, including the MCP SDK and workspace packages.
+  noExternal: [/.*/],
   banner: {
     js: "import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);",
   },

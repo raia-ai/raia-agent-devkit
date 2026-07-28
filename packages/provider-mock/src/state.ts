@@ -11,6 +11,7 @@ import type {
   DeploymentState,
   Draft,
   ReleaseCandidate,
+  Trace,
   Workspace,
 } from "@raia/contracts";
 
@@ -41,6 +42,8 @@ export interface MockState {
   releases: Record<string, ReleaseCandidate>;
   deployments: Record<string, StoredDeployment>;
   idempotency: Record<string, IdempotencyRecord>;
+  /** Raw traces as the platform stored them; redaction happens on read. */
+  traces: Record<string, Trace>;
 }
 
 export function emptyState(): MockState {
@@ -53,6 +56,7 @@ export function emptyState(): MockState {
     releases: {},
     deployments: {},
     idempotency: {},
+    traces: {},
   };
 }
 

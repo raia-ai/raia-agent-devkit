@@ -143,8 +143,32 @@ describe("MockManagementProvider", () => {
         },
       ),
     ).rejects.toMatchObject({ code: "UNAVAILABLE" });
-    await expect(provider.getTrace(ctx(), "t", 1024)).rejects.toMatchObject({
-      code: "UNAVAILABLE",
+  });
+
+  it("serves redacted, size-capped, version-bound traces (spec scenario 14, server side)", async () => {
+    await provider.seedFromFixture(HELPDESK);
+
+    const list = await provider.listTraces(ctx(), { agentId: "agent_mock_helpdesk" });
+    expect(list.items.map((t) => t.id)).toEqual([
+      "trace_failure_1",
+      "trace_injection_1",
+      "trace_success_1",
+    ]);
+    const failures = await provider.listTraces(ctx(), {
+      agentId: "agent_mock_helpdesk",
+      outcome: "failure",
     });
+    expect(failures.items.map((t) => t.id)).toEqual(["trace_failure_1"]);
+
+    const trace = await provider.getTrace(ctx(), "trace_failure_1", 102400);
+    const serialized = JSON.stringify(trace);
+    expect(serialized).not.toContain("ghp_");
+    expect(serialized).toContain("[REDACTED");
+    expect(trace.redactions.length).toBeGreaterThan(0);
+    expect(trace.truncated).toBe(false);
+
+    const capped = await provider.getTrace(ctx(), "trace_failure_1", 1024);
+    expect(capped.truncated).toBe(true);
+    expect(capped.events.length).toBeLessThan(trace.events.length);
   });
 });

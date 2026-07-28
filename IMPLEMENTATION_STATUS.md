@@ -132,9 +132,40 @@ clean; build 10/10. Built-binary golden path now runs the complete lifecycle:
   refreshing the lock after remote drift currently reuses `init --force`.
 - Traces (`raia trace`, `raia learn`) arrive with WP5 alongside the MCP surface.
 
-## Next smallest vertical slice (WP5 — proposed, not started)
+## WP5 — MCP server and Claude Code plugin
 
-Local stdio MCP server matching `contracts/mcp-tool-catalog.json` exactly (tool
-allowlist, staging-only, size-capped redacted outputs), mock trace fixtures with
-redaction, and the Claude Code plugin: bundled server, skills, review agents,
-cross-platform hooks, strict manifest validation.
+| Gate                                                                      | Status      | Evidence                                                                                                                                                                                                                                  |
+| ------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MCP tools exactly match `contracts/mcp-tool-catalog.json`                 | ✅ complete | `mcp-server.test.ts`: `listTools` deep-equals the spec catalog (names, descriptions, input schemas); server serves the catalog verbatim from a byte-copied file                                                                           |
+| Inputs/outputs validated; paths restricted to approved roots              | ✅ complete | Ajv validation against catalog schemas (with pre-applied defaults); `projectRoot: /etc` rejected before any read; outputs redacted via core redaction and capped at 1 MiB                                                                 |
+| Trace content redacted, capped, labeled untrusted (scenario 14)           | ✅ complete | Provider redacts server-side (rule ids recorded, byte-capped with `truncated`); MCP re-redacts, labels `untrusted: true` with an explicit data-not-instructions notice; hostile injection text survives as data only; token never appears |
+| Plugin bundles the MCP server; no global CLI required                     | ✅ complete | `splitting: false` + full `noExternal` single-file bundles; stdio smoke test drives the actual `plugins/claude-code/dist/mcp-server.js` and lists all 15 tools                                                                            |
+| Skills/agents call deterministic core operations                          | ✅ complete | 8 skills instruct calling `raia_*` tools/CLI with preview-confirm-report contracts; MCP handlers delegate to the same CLI runners (single implementation); 5 read-only review agents (`tools: Read, Grep, Glob`)                          |
+| Cross-platform hooks: fast checks + production denial                     | ✅ complete | Node-only hook scripts; deny hook blocks `raia deploy production` (Bash) and production tool names with exit 2, passes staging; validated by executing the real script in tests                                                           |
+| `claude plugin validate plugins/claude-code --strict` passes              | ✅ complete | "√ Validation passed" — after resolving a RECORDED template conflict (ADR 0005 §1: template `"agents": "./agents/"` fails strict validation; array form used, all other fields byte-identical, test-enforced)                             |
+| No production/shell/SQL/secret-read/URL-fetch tool anywhere (scenario 12) | ✅ complete | Tool-list enumeration against `forbiddenTools` + name-pattern sweep; forbidden call returns a typed error; plugin surfaces swept for forbidden capability references                                                                      |
+
+MCP golden path reproduced end to end over the protocol: init → validate →
+evaluation_run (gate passed) → release_create (rc_1) → deployment_staging_create
+(HEALTHY) → context (stage RELEASED). Full suite after WP5: **197 tests across
+21 files**; strict plugin validation green; all quality gates green. Decisions
+and the recorded template conflict in `docs/adr/0005-wp5-mcp-and-plugin-choices.md`.
+
+## WP5 known limitations
+
+- The plugin `dist/` is assembled by `pnpm build` (git-ignored); packaged,
+  checksummed plugin artifacts are WP7 scope.
+- `raia mcp serve` as a CLI alias is deferred to avoid a package cycle
+  (ADR 0005 §7); the standalone `raia-mcp` bin and the plugin launch path cover
+  the spec's intent.
+- Remote evaluation runs remain provider-gated (`UNAVAILABLE`) pending WP6.
+
+## Next smallest vertical slice (WP6 — proposed, not started)
+
+HTTP providers behind the existing boundaries: the `/agent-devkit/v1`
+management client generated against `contracts/raia-management.openapi.yaml`
+with contract tests against a local conforming mock server (idempotency
+headers, If-Match, Retry-After, bounded backoff, request-id propagation,
+redacted logging), and the pinned `external-openapi-v1` conversation client
+from `contracts/vendor/` with `developer-v1` failing closed
+(`CAPABILITY_UNAVAILABLE`).

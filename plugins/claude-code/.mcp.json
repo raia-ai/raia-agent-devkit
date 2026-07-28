@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "raia": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/mcp-server.js", "--plugin-mode"],
+      "env": {
+        "RAIA_PLUGIN_ROOT": "${CLAUDE_PLUGIN_ROOT}"
+      }
+    }
+  }
+}
